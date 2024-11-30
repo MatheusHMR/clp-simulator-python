@@ -16,3 +16,63 @@ Este código simula uma interface de programação e simulação de CLP, permiti
 O simulador também suporta diferentes modos de operação: PROGRAM, que permite editar o programa do usuário; STOP, que interrompe a execução; e RUN, que executa a lógica do usuário. A interface em Python permite que os usuários salvem e carreguem programas em arquivos de texto simples, e acompanhem o estado das entradas, saídas e memórias booleanas.
 
 Engenharia de Computação, IFTM, Campus Uberaba Parque Tecnológico 2024/2
+
+## Configuração do Ambiente com Poetry
+
+Este projeto utiliza o Poetry para gerenciar dependências e configurar o ambiente virtual de desenvolvimento. Siga os passos abaixo para configurar o ambiente e executar o projeto.
+
+### 1. Instalar o Poetry
+
+Para instalar o Poetry, execute o seguinte comando no terminal:
+
+> curl -sSL https://install.python-poetry.org | python3 -
+
+Verifique se a instalação foi bem-sucedida:
+
+> poetry --version
+
+### 2. Criar e Ativar o Ambiente Virtual
+
+Com o Poetry instalado, siga os passos abaixo para configurar o ambiente virtual do projeto:
+
+Inicializar o Ambiente Virtual e Instalar Dependências:
+
+No diretório raiz do projeto, execute:
+
+> poetry install
+
+Isso criará o ambiente virtual e instalará todas as dependências necessárias especificadas no arquivo pyproject.toml.
+
+Ativar o Ambiente Virtual:
+
+Para entrar no ambiente virtual, use:
+
+> poetry shell
+
+Você verá algo como (clp-simulator-python) no início do seu terminal, indicando que está no ambiente virtual.
+
+3. Adicionar Dependências ao Projeto
+
+Se precisar adicionar novas dependências ao projeto, use o seguinte comando:
+
+> poetry add <nome-da-dependencia>
+
+Por exemplo, para adicionar a biblioteca requests (não é pra adicionar no projeto nosso):
+
+> poetry add requests
+
+4. Executar o Projeto
+
+Para executar o simulador de CLP, certifique-se de que o ambiente virtual está ativado e, em seguida, rode o comando:
+
+> python main.py
+
+Se preferir executar sem ativar manualmente o ambiente virtual, você pode usar:
+
+> poetry run python main.py
+
+5. Informações Adicionais
+
+Como Instalar Dependências: Todas as dependências estão listadas no arquivo pyproject.toml. Para instalar, execute poetry install.
+
+Contribuidores: Se você é um colaborador, siga as etapas acima para configurar o ambiente e contribuir para o projeto.
