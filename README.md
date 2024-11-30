@@ -3,10 +3,16 @@
 Authors: Alexandre Monteiro Londe, Esdras Santos de Oliveira (Arduino/Hardware)
            Júlia Cordeiro e Silva, Nathan Silva Rodrigues (Python Interface)
 
-ENGLISH
-This code simulates a PLC programming interface, allowing the user to create a simple program using logic operators AND (^), OR (|) and NOT (!), accessing eight digital inputs and outputs (present in the Arduino), and also sixteen boolean memories (handled exclusively by the python software). The Arduino acts as a slave, only answering to serial queries from the python software (estabilish connection, read inputs, write outputs). The communication protocol was custom made for this application. The python interface also allows the user to load and save programs in simple text, and allows tracking the state of the inputs, outputs and boolean memories.
+__ENGLISH__
 
-PORTUGUÊS
-Esse código simula uma interface de programação de CLP, permitindo o usuário criar programas simples utilizando operadores lógicos AND (^), OR (|) e NOT (!), acessando oito entradas e saidas digitais (presentes no Arduino), e também dezesseis memórias booleanas (gerenciadas exclusivamente pelo software python). O Arduino atua como escravo, respondendo apenas a requisições seriais do software python (estabelecer conexão, ler entradas, escrever saidas). Um protocolo de comunicação específico foi criado para a aplicação. A interface python também permite o usuário salvar e carregar programas em texto simples, e permite acompanhar o estado das entradas, saídas e memórias booleanas.
+This code simulates a PLC programming interface, allowing the user to create a simple program using logic operators AND (^), OR (|) and NOT (!), and interact with eight digital inputs and outputs, as well as thirty-two boolean memories. The simulation runs fully in Python, using a graphical interface built with PySimpleGUI. The PLC simulator follows the traditional scan cycle: initializing, reading inputs, processing user logic, and updating outputs.
 
-Engenharia de Computação, IFTM, Campus Uberaba Parque Tecnológico 2022/2
+The simulator also supports different modes of operation: PROGRAM, which allows editing the user program; STOP, which stops the execution; and RUN, which executes the user logic. The Python interface allows users to load and save programs in simple text files, and to track the state of inputs, outputs, and boolean memories.
+
+__PORTUGUÊS__
+
+Este código simula uma interface de programação e simulação de CLP, permitindo que o usuário crie programas simples utilizando os operadores lógicos AND (^), OR (|) e NOT (!), e interaja com oito entradas e saídas digitais, além de trinta e duas memórias booleanas. A simulação é feita inteiramente em Python, usando uma interface gráfica construída com PySimpleGUI. O simulador de CLP segue o ciclo de varredura tradicional: inicialização, leitura das entradas, processamento da lógica do usuário e atualização das saídas.
+
+O simulador também suporta diferentes modos de operação: PROGRAM, que permite editar o programa do usuário; STOP, que interrompe a execução; e RUN, que executa a lógica do usuário. A interface em Python permite que os usuários salvem e carreguem programas em arquivos de texto simples, e acompanhem o estado das entradas, saídas e memórias booleanas.
+
+Engenharia de Computação, IFTM, Campus Uberaba Parque Tecnológico 2024/2
