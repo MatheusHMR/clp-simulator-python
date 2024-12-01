@@ -2,39 +2,50 @@ from .automaton import Automaton
 from .constants import *
 import re
 
+def tokenize(sentence):
+
+    # Build regex to match tokens based on the ALPHABET
+    regex = '|'.join(re.escape(word) for word in sorted(ALPHABET, key=len, reverse=True))
+
+    pattern = rf"({regex})"
+    
+    # Find tokens in the sentence using regex
+    tokens = re.findall(pattern, sentence)
+
+    print(tokens)
+
+    return tokens
+
+def validateSentence(sentence):
+
+    error = True
+    pattern = r"[A-Z]"
+    uppercase_letters = re.findall(pattern, sentence)
+
+    tokens = tokenize(sentence)
+
+    # Check if all tokens are valid and there are no uppercase letters
+    if (all(token in ALPHABET for token in tokens) and not uppercase_letters):
+        error = False
+
+    return error
+
 def simplifySentece(sentence):
-    #Removing spaces
+    # Remove spaces
     sentence = sentence.replace(' ','') 
 
-    #Sentence to uppercase
+    # Convert sentence to uppercase
     sentence = sentence.upper()
 
-    #Replaces I1, I2, ..., I8 with i:
-    i = 0
-    while i < len(INPUT_LABELS):
-        print(f"SIMP: Replacing {INPUT_LABELS[i]} with i")
-        sentence = sentence.replace(INPUT_LABELS[i], 'i')
-        i += 1
-
-    #Replaces O1, O2, ..., O8 with o:
-    i = 0
-    while i < len(OUTPUT_LABELS):
-        print(f"SIMP: Replacing {OUTPUT_LABELS[i]} with o")
-        sentence = sentence.replace(OUTPUT_LABELS[i], 'o')
-        i += 1
-
-    #Replaces B1, B2, ..., B8 with b:
-    i = 0
-    while i < len(BOOLEAN_LABELS):
-        print(f"SIMP: Replacing {BOOLEAN_LABELS[i]} with b")
-        sentence = sentence.replace(BOOLEAN_LABELS[i], 'b')
-        i += 1
+    print(sentence)
 
     i = 0
     while i < len(TIMER_ON_LABELS):
         print(f"SIMP: Replacing {TIMER_ON_LABELS[i]} with ton")
         sentence = sentence.replace(TIMER_ON_LABELS[i], 'ton')
         i += 1
+
+    print(sentence)
 
     i = 0
     while i < len(TIMER_ON_OUTS_LABELS):
@@ -69,130 +80,127 @@ def simplifySentece(sentence):
     i = 0
     while i < len(COUNTER_DOWN_LABELS):
         print(f"SIMP: Replacing {COUNTER_DOWN_LABELS[i]} with cdn")
-        sentence = sentence.replace(COUNTER_DOWN_LABELS[i], 'cdno')
+        sentence = sentence.replace(COUNTER_DOWN_LABELS[i], 'cdn')
         i += 1
     
     i = 0
-    while i < len(COUNTER_UP_OUTS_LABELS):
-        print(f"SIMP: Replacing {COUNTER_UP_OUTS_LABELS[i]} with cupo")
-        sentence = sentence.replace(COUNTER_UP_OUTS_LABELS[i], 'cupo')
+    while i < len(COUNTER_DOWN_OUTS_LABELS):
+        print(f"SIMP: Replacing {COUNTER_DOWN_OUTS_LABELS[i]} with cdno")
+        sentence = sentence.replace(COUNTER_DOWN_OUTS_LABELS[i], 'cdno')
         i += 1
 
+    # Replace I1, I2, ..., I8 with i
+    i = 0
+    while i < len(INPUT_LABELS):
+        print(f"SIMP: Replacing {INPUT_LABELS[i]} with i")
+        sentence = sentence.replace(INPUT_LABELS[i], 'i')
+        i += 1
 
-    #Checking if every char in sentence is present in the alphabet
-    error = True
-    sorted_alphabet = sorted(ALPHABET, key=len, reverse=True)
+    # Replace O1, O2, ..., O8 with o
+    i = 0
+    while i < len(OUTPUT_LABELS):
+        print(f"SIMP: Replacing {OUTPUT_LABELS[i]} with o")
+        sentence = sentence.replace(OUTPUT_LABELS[i], 'o')
+        i += 1
 
-    print(sorted_alphabet)
+    # Replace B1, B2, ..., B8 with b
+    i = 0
+    while i < len(BOOLEAN_LABELS):
+        print(f"SIMP: Replacing {BOOLEAN_LABELS[i]} with b")
+        sentence = sentence.replace(BOOLEAN_LABELS[i], 'b')
+        i += 1
 
-    # Criar um regex para capturar tokens do alfabeto
-    pattern = r"|".join(rf"\b{re.escape(token)}\b" for token in sorted_alphabet)
-
-
-    # Verificar e capturar os tokens
-    tokens = re.findall(pattern, sentence.lower())
-
-    if (all(token in ALPHABET for token in tokens)):
-        error = False
-        
+    # Check if every character in the sentence is present in the alphabet
+    error = validateSentence(sentence)
     return (sentence, error)
 
         
 def interpretSentece(sentence):
     automaton = Automaton()
-
-
+    
     tokenIndex = 0
     stateIndex = 0
     error = False
     accepted = False
 
     original_sentence = sentence
-    # Não é necessário simplificar sentença aqui, porque já tokenizamos
+    # No need to simplify the sentence here since it was already tokenized
     (sentence, simplifyError) = simplifySentece(sentence)
 
-    sorted_alphabet = sorted(ALPHABET, key=len, reverse=True)
-
-    # Criar um regex para capturar tokens do alfabeto
-    pattern = r"|".join(re.escape(token) for token in sorted_alphabet)
-
-    # Verificar e capturar os tokens
-    tokens = re.findall(pattern, sentence)
-
-    print(tokens)
+    tokens = tokenize(sentence)
 
     if not simplifyError:
         while not error and not accepted and tokenIndex < len(tokens):
 
-            currentToken = tokens[tokenIndex]  # Obter o token atual
+            currentToken = tokens[tokenIndex]  # Get the current token
             currentState = automaton.states[stateIndex]
             transitionIndex = -1
 
             i = 0
             
-            print("VERYFING SENTENCE...")
+            print("VERIFYING SENTENCE...")
             print(f"currentToken: {currentToken}")
             print(f"currentState: {stateIndex}")
 
-            # Procurar uma transição que leia o currentToken
+            # Search for a transition that reads the currentToken
             while i < len(currentState.transitions):
                 if currentState.transitions[i].char == currentToken:
                     transitionIndex = i
                 i += 1
 
-            # Encontrou uma transição - ESTA NÃO É UMA TRANSIÇÃO VAZIA
+            # Found a transition - THIS IS NOT AN EMPTY TRANSITION
             if transitionIndex != -1:
                 transition = currentState.transitions[transitionIndex]
                 print(f"Found normal transition: {transition}")
 
-                # Esta transição lê da pilha
+                # This transition reads from the stack
                 if transition.read != '?':
                     if automaton.readFromStack(transition.read):
                         stateIndex = transition.targetState
                         tokenIndex += 1
                     else:
-                        error = True  # Erro: não conseguiu ler da pilha
-                elif transition.push != '?':  # Esta transição empilha
+                        error = True  # Error: unable to read from the stack
+                elif transition.push != '?':  # This transition pushes to the stack
                     automaton.pushToStack(transition.push)
                     stateIndex = transition.targetState
                     tokenIndex += 1
-                else:  # Esta transição não faz nada com a pilha
+                else:  # This transition does nothing with the stack
                     stateIndex = transition.targetState
                     tokenIndex += 1
-            else:  # Não encontrou uma transição normal, procurar uma transição vazia
+            else:  # Did not find a normal transition, search for an empty transition
                 i = 0
                 while i < len(currentState.transitions):
                     if currentState.transitions[i].char == '?':
                         transitionIndex = i
                     i += 1
 
-                # Encontrou uma transição vazia - NÃO INCREMENTA tokenIndex
+                # Found an empty transition - DO NOT INCREMENT tokenIndex
                 if transitionIndex != -1:
                     transition = currentState.transitions[transitionIndex]
                     print(f"Found empty transition: {transition}")
 
-                    # Esta transição lê da pilha
+                    # This transition reads from the stack
                     if transition.read != '?':
                         if automaton.readFromStack(transition.read):
                             stateIndex = transition.targetState
                         else:
-                            error = True  # Erro: não conseguiu ler da pilha
-                    elif transition.push != '?':  # Esta transição empilha
+                            error = True  # Error: unable to read from the stack
+                    elif transition.push != '?':  # This transition pushes to the stack
                         automaton.pushToStack(transition.push)
                         stateIndex = transition.targetState
-                    else:  # Esta transição não faz nada com a pilha
+                    else:  # This transition does nothing with the stack
                         stateIndex = transition.targetState
-                else:  # Não encontrou nenhuma transição vazia. Isso é um erro.
+                else:  # Did not find any empty transition. This is an error.
                     error = True
 
         print("FINAL STEP...")
         print(f"stopState: {stateIndex}")
         if ((stateIndex == 4 or stateIndex == 7 or stateIndex == 9) and not error):
             if automaton.readFromStack('$'):
-                return 0  # Aceita a sentença
+                return 0  # Accept the sentence
             else:
-                return 1  # Rejeita a sentença
+                return 1  # Reject the sentence
         else:
-            return 1  # Rejeita a sentença
+            return 1  # Reject the sentence
     else:
-        return 2  # Erro de simplificação
+        return 2  # Simplification error
