@@ -2,7 +2,7 @@ from components.counter import Counter
 from components.timer import Timer
 
 class ScanCycle:
-    def __init__(self):
+    def __init__(self, logical_structure):
         self.cycles = 0 # Number of scan cycles executed
         # Initialization of attributes related to PLC inputs, outputs, and memories
         self.inputs = [False] * 8  # Assuming 8 digital inputs
@@ -10,6 +10,7 @@ class ScanCycle:
         self.memory_image_inputs = [False] * 8  # Input image memory
         self.memory_image_outputs = [False] * 8  # Output image memory
         self.boolean_memories = [False] * 32  # Local boolean memories (32)
+        self.logical_structure = logical_structure
 
         # Timers and Counters dictionaries
         self.timers = {

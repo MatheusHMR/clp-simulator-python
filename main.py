@@ -5,17 +5,25 @@ import automata.sentence_interpreter as senInt
 import reverse_polish_notation.create_notation as create_notation
 import reverse_polish_notation.logical_structure as logical_structure
 import communication as comm
+from scan_cycle.scan_cycle import ScanCycle
+
+
+
 
 sg.theme('DarkBlue') #Add a touch of color
 logicalStructure = logical_structure.LogicalStructure([]) #Creating an empty logicalStructure
 inExecution = False
 isConnected = False
 serialPort = comm.initializeSerial()
+scan_cycle = ScanCycle(logicalStructure)
+
+current_mode = 'STOP'
+
 
 #All the stuff inside your window.
 menu_def = [['Programa', ['Novo', 'Abrir', 'Salvar']],
             ['Comandos', ['Compilar']],
-            ['CLP', ['Conectar', 'Executar', 'Parar']],
+            ['CLP', ['Conectar', 'Modo', ['RUN', 'STOP', 'PROGRAM']]],
             ['Ajuda', ['Sobre...', 'Programar']],
             ]
 
@@ -74,11 +82,13 @@ left_col = sg.Column([
 right_col = sg.Column([
     [sg.Text('Informações do CLP')],
     [sg.Text('Não Conectado', key='k_conn_text')],
+    [sg.Text('Modo: STOP', key='k_mode_text')],
     [sg.Text('Não Executando', key='k_exec_text')],
     [input_col, output_col],
     [sg.Text('Mem. Booleanas:')],
     [boolean_col_left, boolean_col_right],
     ], vertical_alignment='top')
+
 
 #Window Layout
 layout = [  [sg.Menu(menu_def)],
@@ -117,45 +127,22 @@ def compileProgram(program): #Compiles the program. Each individual line is subm
         compile_success.compileSuccessWindow()
 
 def executeProgram():
-    byte = comm.readButtons(serialPort)
-    string = byte.decode('ascii')
-    string = string[1:9]
-    print(f'EXEC> {string}')
-    if(len(string) == 8):
-        stringList = list(string)
-        i = 0
-        while i < len(stringList):
-            if(stringList[i] == '1'):
-                stringList[i] = True
-            else:
-                stringList[i] = False
-            i += 1
-        logicalStructure.updateInputs(stringList)
-        outputList = logicalStructure.updateOutputs()
+    scan_cycle.scan()
+    updateScreenValues()
 
-        responseString = '@'
-        for item in outputList:
-            if(item == True):
-                responseString = responseString + '1'
-            else:
-                responseString = responseString + '0'
-        
-        responseString = responseString + '#'
-        encodedString = responseString.encode('utf-8')
-        comm.sendLedByte(serialPort, encodedString)
-        updateScreenValues(logicalStructure.inputs, logicalStructure.outputs, logicalStructure.booleans)
    
-def updateScreenValues(inputs, outputs, bools): #Updates values shown in screen
-    i = 0
-    while i < 8:
+def updateScreenValues():
+    inputs = scan_cycle.inputs
+    outputs = scan_cycle.outputs
+    bools = scan_cycle.boolean_memories
+
+    for i in range(8):
         keyInput = f'k_i{i+1}_state'
         keyOutput = f'k_o{i+1}_state'
         window[keyInput].update(inputs[i])
         window[keyOutput].update(outputs[i])
-        i += 1
-    
-    i = 0
-    while i < 16:
+
+    for i in range(16):
         keyBoolean = f'k_b{i+1}_state'
         window[keyBoolean].update(bools[i])
         i += 1
@@ -197,6 +184,20 @@ def setExecution(bool):
     else:
         window['k_exec_text'].update('Não Executando')
         return False
+    
+def set_mode(mode):
+    global current_mode
+    current_mode = mode
+    scan_cycle.set_mode(mode)
+    window['k_mode_text'].update(f'Modo: {current_mode}')
+    print(f'Modo alterado para: {current_mode}')
+    update_editing_state()
+
+def update_editing_state():
+    if current_mode == 'PROGRAM':
+        window['k_input_area'].update(disabled=False)
+    else:
+        window['k_input_area'].update(disabled=True)
 
 #Event Loop to process "events" and get the "values" of the inputs
 while True:
@@ -260,8 +261,14 @@ while True:
         window.disappear()
         program_help.programHelpWindow()
         window.reappear()
+    if event == 'RUN':
+        set_mode('RUN')
+    elif event == 'STOP':
+        set_mode('STOP')
+    elif event == 'PROGRAM':
+        set_mode('PROGRAM')
 
-    if inExecution:
+    if current_mode == 'RUN':
         executeProgram()
 
 window.close()
