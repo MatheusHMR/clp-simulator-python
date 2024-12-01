@@ -5,6 +5,7 @@ def reverse_polish_notation(output):
     polish = []
     stack = []
 
+    print(output)
     output = output.replace(" ","").replace("(","")
     exp = output.split("=")[1]
     exp_end = len(exp)
@@ -21,10 +22,16 @@ def reverse_polish_notation(output):
                 else:
                   polish.append(exp[i_exp:i_exp+2])  
             else:
-                polish.append(exp[i_exp:i_exp+2])
-            i_exp += 1
+                if exp[i_exp] == 'O' or exp[i_exp] == 'I':
+                    polish.append(exp[i_exp:i_exp+2])
+                    i_exp += 1
+                else:
+                    polish.append(exp[i_exp:i_exp+5])
+                    i_exp += 4  
+            
         else:
             if exp[i_exp] in OPERATORS:
+                print(exp[i_exp])
                 stack.append(exp[i_exp])
             elif exp[i_exp] == ")":
                 if stack:

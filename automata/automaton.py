@@ -42,7 +42,11 @@ class Automaton:
         #State 1
         self.states.append(State(
             [Transition('o','?','?',2),
-             Transition('b','?','?',2)],
+             Transition('b','?','?',2),
+             Transition('ton','?','?',2),
+             Transition('tof','?','?',2),
+             Transition('cup','?','?',2),
+             Transition('cdn','?','?',2)],
             False
         ))
         #State 2
@@ -56,7 +60,11 @@ class Automaton:
              Transition('(','?','X',8),
              Transition('i','?','?',4),
              Transition('o','?','?',4),
-             Transition('b','?','?',4)],
+             Transition('b','?','?',4),
+             Transition('tono','?','?',4),
+             Transition('tofo','?','?',4),
+             Transition('cupo','?','?',4),
+             Transition('cdno','?','?',4)],
             False
         ))
         #State 4
@@ -72,7 +80,11 @@ class Automaton:
             [Transition('(','?','X',8),
              Transition('i','?','?',7),
              Transition('o','?','?',7),
-             Transition('b','?','?',7)],
+             Transition('b','?','?',7),
+             Transition('tono','?','?',7),
+             Transition('tofo','?','?',7),
+             Transition('cupo','?','?',7),
+             Transition('cdno','?','?',7)],
             False
         ))
         #State 6
@@ -81,6 +93,10 @@ class Automaton:
              Transition('i','?','?',9),
              Transition('o','?','?',9),
              Transition('b','?','?',9),
+             Transition('tono','?','?',9),
+             Transition('tofo','?','?',9),
+             Transition('cupo','?','?',9),
+             Transition('cdno','?','?',9),
              Transition('!','?','?',5)],
             False
         ))
@@ -98,6 +114,10 @@ class Automaton:
              Transition('i','?','?',11),
              Transition('o','?','?',11),
              Transition('b','?','?',11),
+             Transition('tono','?','?',11),
+             Transition('tofo','?','?',11),
+             Transition('cupo','?','?',11),
+             Transition('cdno','?','?',11),
              Transition('!','?','?',5)],
             False
         ))
@@ -124,6 +144,10 @@ class Automaton:
             [Transition('i','?','?',13),
              Transition('o','?','?',13),
              Transition('b','?','?',13),
+             Transition('tono','?','?',13),
+             Transition('tofo','?','?',13),
+             Transition('cupo','?','?',13),
+             Transition('cdno','?','?',13),
              Transition('(','?','X',8)],
             False
         ))
