@@ -13,7 +13,7 @@ class ScanCycle:
 
         # Timers and Counters dictionaries
         self.timers = {
-            f"T{i+1}": Timer(name=f"T{i+1}") for i in range(8)
+            f"T{i+1}": Timer(name=f"T{i+1}") for i in range(32)
         }  # Timers named T1, T2, ..., T8
 
         self.counters = {

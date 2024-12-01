@@ -36,3 +36,4 @@ class Timer:
                 elif self.type == 'OFF DELAY':
                     self.triggered = False
                     print(f"OFF DELAY of Timer {self.name} completed. Deactivating output.")
+

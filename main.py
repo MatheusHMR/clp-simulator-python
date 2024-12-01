@@ -1,25 +1,28 @@
 import PySimpleGUI as sg
 from views import authors, error, program_help, compile_success, confirm_new, file_controller
 import automata.sentence_interpreter as senInt
-#from reverse_polish_notation import create_notation, logical_structure
+# from reverse_polish_notation import create_notation, logical_structure
 import reverse_polish_notation.create_notation as create_notation
 import reverse_polish_notation.logical_structure as logical_structure
 import communication as comm
-
-sg.theme('DarkBlue') #Add a touch of color
-logicalStructure = logical_structure.LogicalStructure([]) #Creating an empty logicalStructure
+from components.timer import Timer  # Importação corrigida
+sg.theme('DarkBlue')  # Adiciona um toque de cor
+logicalStructure = logical_structure.LogicalStructure([])  # Cria uma LogicalStructure vazia
 inExecution = False
 isConnected = False
 serialPort = comm.initializeSerial()
 
-#All the stuff inside your window.
+# Inicializa os valores dos temporizadores
+timerValues = {f'T{i+1}': 0 for i in range(32)}
+
+# Todas as configurações dentro da janela.
 menu_def = [['Programa', ['Novo', 'Abrir', 'Salvar']],
-            ['Comandos', ['Compilar']],
+            ['Comandos', ['Compilar', 'Configurar Temporizadores']],
             ['CLP', ['Conectar', 'Executar', 'Parar']],
             ['Ajuda', ['Sobre...', 'Programar']],
             ]
 
-#Layout columns
+# Colunas de layout
 input_col = sg.Column([
     [sg.Text('Entradas:')],
     [sg.Text("I1:"), sg.Text('False', key='k_i1_state')],
@@ -78,39 +81,39 @@ right_col = sg.Column([
     [input_col, output_col],
     [sg.Text('Mem. Booleanas:')],
     [boolean_col_left, boolean_col_right],
-    ], vertical_alignment='top')
+], vertical_alignment='top')
 
-#Window Layout
-layout = [  [sg.Menu(menu_def)],
-            [left_col, right_col]]
+# Layout da janela
+layout = [[sg.Menu(menu_def)],
+          [left_col, right_col]]
 
-#Create the Window
+# Cria a janela
 window = sg.Window('clp-programmer v0.1', layout)
 
-#Functions
-def compileProgram(program): #Compiles the program. Each individual line is submited to the syntax check
+# Funções
+def compileProgram(program):  # Compila o programa. Cada linha individual é submetida à verificação de sintaxe
     programLines = program.splitlines()
     errorList = []
     i = 1
-    for line in programLines: #Test each progrma line
+    for line in programLines:  # Testa cada linha do programa
         res = senInt.interpretSentece(line)
-        if(res != 0):
-            if(res == 1):
+        if res != 0:
+            if res == 1:
                 errorList.append(f'Erro de sintaxe linha {i}')
-            if(res == 2):
+            if res == 2:
                 errorList.append(f'Erro de rótulo linha {i}')
         i += 1
-    
-    if(len(errorList) != 0): #Error list is not empty
+
+    if len(errorList) != 0:  # Lista de erros não está vazia
         error.errorWindow('Erro!', 'Erros de compilação detectados, verifique a ajuda.')
     else:
         polishNotations = []
-        for line in programLines: #Generate one polish tuple for each line in program
-            line = line.replace(' ','')
+        for line in programLines:  # Gera uma tupla polonesa para cada linha no programa
+            line = line.replace(' ', '')
             line = line.upper()
             newPolish = create_notation.reverse_polish_notation(line)
             identifier = line.split('=')[0]
-            polishNotations.append((identifier, newPolish)) #Pushes the tuple into the array
+            polishNotations.append((identifier, newPolish))  # Adiciona a tupla ao array
 
         logicalStructure.updatePolishNotations(polishNotations)
         print(logicalStructure)
@@ -121,31 +124,32 @@ def executeProgram():
     string = byte.decode('ascii')
     string = string[1:9]
     print(f'EXEC> {string}')
-    if(len(string) == 8):
+    if len(string) == 8:
         stringList = list(string)
         i = 0
         while i < len(stringList):
-            if(stringList[i] == '1'):
+            if stringList[i] == '1':
                 stringList[i] = True
             else:
                 stringList[i] = False
             i += 1
         logicalStructure.updateInputs(stringList)
-        outputList = logicalStructure.updateOutputs()
+        # Aqui passamos os valores dos temporizadores para a estrutura lógica
+        outputList = logicalStructure.updateOutputs(timerValues)
 
         responseString = '@'
         for item in outputList:
-            if(item == True):
+            if item == True:
                 responseString = responseString + '1'
             else:
                 responseString = responseString + '0'
-        
+
         responseString = responseString + '#'
         encodedString = responseString.encode('utf-8')
         comm.sendLedByte(serialPort, encodedString)
         updateScreenValues(logicalStructure.inputs, logicalStructure.outputs, logicalStructure.booleans)
-   
-def updateScreenValues(inputs, outputs, bools): #Updates values shown in screen
+
+def updateScreenValues(inputs, outputs, bools):  # Atualiza os valores mostrados na tela
     i = 0
     while i < 8:
         keyInput = f'k_i{i+1}_state'
@@ -153,7 +157,7 @@ def updateScreenValues(inputs, outputs, bools): #Updates values shown in screen
         window[keyInput].update(inputs[i])
         window[keyOutput].update(outputs[i])
         i += 1
-    
+
     i = 0
     while i < 16:
         keyBoolean = f'k_b{i+1}_state'
@@ -169,7 +173,7 @@ def saveProgram():
         file.write(program)
         file.close()
     except:
-        error.errorWindow('Erro!','Não foi possivel salvar o arquivo no caminho especificado.')
+        error.errorWindow('Erro!', 'Não foi possivel salvar o arquivo no caminho especificado.')
 
 def openProgram():
     path = file_controller.openFileWindow()
@@ -183,7 +187,7 @@ def openProgram():
         return ''
 
 def setConnected(bool):
-    if(bool == True):
+    if bool == True:
         window['k_conn_text'].update(f'Conectado ao CLP ({serialPort.port})')
         return True
     else:
@@ -191,28 +195,79 @@ def setConnected(bool):
         return False
 
 def setExecution(bool):
-    if(bool == True):
+    if bool == True:
         window['k_exec_text'].update('Em Execução')
         return True
     else:
         window['k_exec_text'].update('Não Executando')
         return False
 
-#Event Loop to process "events" and get the "values" of the inputs
+def configureTimers():
+    # Cria o layout para a janela de configuração dos temporizadores
+    layout = []
+    # Cria colunas para os temporizadores
+    timer_columns = []
+    timers_per_column = 8
+    num_columns = 4
+
+    for col in range(num_columns):
+        column_layout = []
+        for i in range(timers_per_column):
+            timer_num = col * timers_per_column + i + 1
+            timer_name = f'T{timer_num}'
+            # Adiciona uma linha com um label e um campo de entrada
+            current_value = timerValues[timer_name]
+            column_layout.append([sg.Text(timer_name), sg.InputText(default_text=str(current_value), key=timer_name, size=(5,1))])
+        # Adiciona a coluna à lista de colunas
+        timer_columns.append(sg.Column(column_layout, pad=(10,10)))
+
+    # Adiciona as colunas ao layout
+    layout.append(timer_columns)
+
+    # Adiciona botões de submissão e cancelamento
+    layout.append([sg.Button('Enviar'), sg.Button('Cancelar')])
+
+    # Cria a janela
+    window_timers = sg.Window('Configurar Temporizadores', layout)
+
+    # Loop de eventos
+    while True:
+        event, values = window_timers.read()
+        if event == sg.WIN_CLOSED or event == 'Cancelar':
+            break
+        elif event == 'Enviar':
+            # Lê os valores e atualiza os temporizadores
+            for timer_name in timerValues.keys():
+                preset_value = values.get(timer_name)
+                if preset_value is not None and preset_value != '':
+                    try:
+                        preset_value = int(preset_value)
+                        if preset_value < 0:
+                            raise ValueError
+                        # Atualiza o valor do temporizador em timerValues
+                        timerValues[timer_name] = preset_value
+                    except ValueError:
+                        sg.popup(f'Valor inválido para {timer_name}. Por favor, insira um número inteiro não negativo.')
+            sg.popup('Temporizadores atualizados com sucesso.')
+            break
+
+    window_timers.close()
+
+# Loop de eventos para processar "eventos" e obter os "valores" das entradas
 while True:
-    event, values = window.read(timeout=250) #Awaits 10ms for an event
-    if event == sg.WIN_CLOSED: #if user closes window
+    event, values = window.read(timeout=250)  # Aguarda 250ms por um evento
+    if event == sg.WIN_CLOSED:  # Se o usuário fechar a janela
         break
 
-    #Answering to commands on screen menu
+    # Respondendo aos comandos no menu da tela
     if event == 'Novo':
-        if(confirm_new.confirmNewProgram()):
+        if confirm_new.confirmNewProgram():
             window['k_input_area'].update('')
             inExecution = setExecution(False)
     elif event == 'Abrir':
         print('Abrir')
         window.disappear()
-        if(confirm_new.confirmNewProgram()):
+        if confirm_new.confirmNewProgram():
             program = openProgram()
             window['k_input_area'].update(program)
         window.reappear()
@@ -225,14 +280,27 @@ while True:
         print('Compilar')
         setExecution(False)
         program = window['k_input_area'].get()
-        if(len(program) == 0):
-            error.errorWindow('Erro!','A área de programação está vazia.')
+        if len(program) == 0:
+            error.errorWindow('Erro!', 'A área de programação está vazia.')
         else:
             compileProgram(program)
+    elif event == 'Configurar Temporizadores':
+        print('Configurar Temporizadores')
+        window.disappear()
+        configureTimers()
+        window.reappear()
+        # Teste do temporizador
+        timer = Timer(name='T1')
+        timer.start(delay=timerValues['T1'])
+
+        for cycle in range(timerValues['T1'] + 1):
+            timer.update()
+            print(f"Ciclo {cycle+1}: Remaining Time = {timer.remaining_time}, Triggered = {timer.triggered}")
+
     elif event == 'Conectar':
         print('Conectar')
-        if(serialPort != 'none'):
-            if(comm.estabilishConnection(serialPort) == True):
+        if serialPort != 'none':
+            if comm.estabilishConnection(serialPort) == True:
                 isConnected = setConnected(True)
             else:
                 isConnected = setConnected(False)
@@ -241,7 +309,7 @@ while True:
             error.errorWindow('Erro!', 'Nenhum dispositivo foi detectado')
     elif event == 'Executar':
         print('Executar')
-        if(isConnected):
+        if isConnected:
             inExecution = setExecution(True)
         else:
             error.errorWindow('Erro!', 'Não há dispositivo conectado')
