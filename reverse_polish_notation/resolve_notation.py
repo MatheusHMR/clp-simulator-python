@@ -1,6 +1,10 @@
 from .constants import OPERATORS
 
-def resolve(notation, inputs, outputs, booleans):
+def resolve(notation, inputs, outputs, booleans, 
+timers_on, timers_on_out, 
+timers_of, timers_of_out, 
+counters_up, counters_up_out,
+counters_dn, counters_dn_out,):
     in_out = []
     
     index = 0
@@ -17,6 +21,22 @@ def resolve(notation, inputs, outputs, booleans):
                 if len(notation[index]) == 3:
                     address = int(notation[index][1::])
                 notation_resolve.insert(index, booleans[address - 1])
+            elif notation[index][0] == 'TON':
+                notation_resolve.insert(index, timers_on[address - 1])
+            elif notation[index][0] == 'TONO':
+                notation_resolve.insert(index, timers_on_out[address - 1])
+            elif notation[index][0] == 'TOF':
+                notation_resolve.insert(index, timers_of[address - 1])
+            elif notation[index][0] == 'TOFO':
+                notation_resolve.insert(index, timers_of_out[address - 1])    
+            elif notation[index][0] == 'CUP':
+                notation_resolve.insert(index, counters_up[address - 1])
+            elif notation[index][0] == 'CUPO':
+                notation_resolve.insert(index, counters_up_out[address - 1])
+            elif notation[index][0] == 'CDN':
+                notation_resolve.insert(index, counters_dn[address - 1])
+            elif notation[index][0] == 'CDNO':
+                notation_resolve.insert(index, counters_dn_out[address - 1])
         else:
             notation_resolve.insert(index, notation[index])
         index += 1
