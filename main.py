@@ -1,8 +1,9 @@
 import PySimpleGUI as sg
 from components.timer import Timer
 from components.counter import Counter
-from reverse_polish_notation.create_notation import reverse_polish_notation
-from reverse_polish_notation.logical_structure import LogicalStructure
+# Remover a importação de LogicalStructure
+# from reverse_polish_notation.create_notation import reverse_polish_notation
+# from reverse_polish_notation.logical_structure import LogicalStructure
 from views import (
     authors,
     error,
@@ -14,10 +15,15 @@ from views import (
 import automata.sentence_interpreter as senInt
 import communication as comm
 
+# Importar a classe ScanCycle
+# Supondo que a classe ScanCycle esteja em um arquivo chamado scan_cycle.py
+from scan_cycle.scan_cycle import ScanCycle
+
 class PLCProgrammer:
     def __init__(self):
         # Inicialização de variáveis
-        self.logical_structure = LogicalStructure([])
+        # Substituir LogicalStructure por ScanCycle
+        self.scan_cycle = ScanCycle()
         self.in_execution = False
         self.is_connected = False
         self.serial_port = comm.initializeSerial()
@@ -138,14 +144,16 @@ class PLCProgrammer:
             self.show_help()
 
     def handle_input_change(self, event, values):
-        # Atualiza o estado das entradas na estrutura lógica
+        # Atualiza o estado das entradas na scan_cycle
         index = int(event.replace('-IN-', '').replace('-', '')) - 1
-        self.logical_structure.inputs[index] = values[event]
+        self.scan_cycle.inputs[index] = values[event]
+        self.scan_cycle.memory_image_inputs[index] = values[event]
 
     def new_program(self):
         if confirm_new.confirmNewProgram():
             self.window['-PROGRAM-'].update('')
             self.in_execution = self.update_execution_status(False)
+            self.scan_cycle.initialize_system()
 
     def open_program(self):
         self.window.hide()
@@ -188,13 +196,8 @@ class PLCProgrammer:
         if errors:
             error.errorWindow('Erro!', '\n'.join(errors))
         else:
-            polish_notations = []
-            for line in program_lines:
-                clean_line = line.replace(' ', '').upper()
-                identifier = clean_line.split('=')[0]
-                notation = reverse_polish_notation(clean_line)
-                polish_notations.append((identifier, notation))
-            self.logical_structure.updatePolishNotations(polish_notations)
+            # Armazenar o programa do usuário na scan_cycle
+            self.scan_cycle.user_program = program_lines
             compile_success.compileSuccessWindow()
 
     def configure_timers(self):
@@ -216,6 +219,8 @@ class PLCProgrammer:
                     try:
                         self.timer_values[key] = int(values[key])
                         self.window[f'-TIMER-{key[1:]}-'].update(values[key])
+                        # Atualizar o preset do temporizador na scan_cycle
+                        self.scan_cycle.timers[key].preset = int(values[key])
                     except ValueError:
                         sg.popup(f'Valor inválido para {key}. Por favor, insira um número inteiro.')
                 sg.popup('Temporizadores atualizados com sucesso.')
@@ -233,13 +238,15 @@ class PLCProgrammer:
             error.errorWindow('Erro!', 'Nenhum dispositivo foi detectado.')
 
     def run_program(self):
-        if self.is_connected:
-            self.in_execution = self.update_execution_status(True)
-        else:
-            error.errorWindow('Erro!', 'Nenhum dispositivo conectado.')
+        # if self.is_connected:
+        self.scan_cycle.set_mode('RUN')
+        self.in_execution = self.update_execution_status(True)
+        # else:
+            # error.errorWindow('Erro!', 'Nenhum dispositivo conectado.')
 
     def stop_program(self):
-        self.logical_structure.resetStructure()
+        self.scan_cycle.set_mode('STOP')
+        self.scan_cycle.initialize_system()
         comm.sendLedByte(self.serial_port, b'@00000000#')
         self.update_io_values([False]*8, [False]*8, [False]*32)
         self.in_execution = self.update_execution_status(False)
@@ -254,29 +261,38 @@ class PLCProgrammer:
     def execute_cycle(self):
         # Simulação de leitura de entradas
         inputs = [self.window[f'-IN-{i+1}-'].get() for i in range(8)]
-        self.logical_structure.updateInputs(inputs)
+        self.scan_cycle.inputs = inputs
+        self.scan_cycle.read_inputs()
         # Atualização dos temporizadores
-        self.logical_structure.updateTimers(self.timer_values)
+        self.scan_cycle.update_timers()
+        # Processamento do programa do usuário
+        self.scan_cycle.process_user_program()
         # Atualização das saídas
-        outputs = self.logical_structure.updateOutputs(self.timer_values)
-        for i, val in enumerate(outputs):
+        self.scan_cycle.update_outputs()
+        # Atualizar as saídas na interface
+        for i, val in enumerate(self.scan_cycle.outputs):
             self.window[f'-OUT-{i+1}-'].update(value=val)
         # Atualização das memórias booleanas
-        for i, val in enumerate(self.logical_structure.booleans):
+        for i, val in enumerate(self.scan_cycle.boolean_memories):
             self.window[f'-BOOL-{i+1}-'].update(value=str(val))
         # Atualização dos temporizadores na interface
         for i in range(32):
             timer_name = f'T{i+1}'
-            timer_value = self.logical_structure.timers.get(timer_name, 0)
+            timer_value = self.scan_cycle.timers[timer_name].remaining_time
             self.window[f'-TIMER-{i+1}-'].update(value=str(timer_value))
 
     def update_io_values(self, inputs, outputs, booleans):
         for i, val in enumerate(inputs):
             self.window[f'-IN-{i+1}-'].update(value=val)
+            self.scan_cycle.inputs[i] = val
+            self.scan_cycle.memory_image_inputs[i] = val
         for i, val in enumerate(outputs):
             self.window[f'-OUT-{i+1}-'].update(value=val)
+            self.scan_cycle.outputs[i] = val
+            self.scan_cycle.memory_image_outputs[i] = val
         for i, val in enumerate(booleans):
             self.window[f'-BOOL-{i+1}-'].update(value=str(val))
+            self.scan_cycle.boolean_memories[i] = val
 
     def update_connection_status(self, status):
         self.window['-CONN_STATUS-'].update('Conectado' if status else 'Desconectado', text_color='green' if status else 'red')

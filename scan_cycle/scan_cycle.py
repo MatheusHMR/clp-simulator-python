@@ -1,32 +1,34 @@
+import re
 from components.counter import Counter
 from components.timer import Timer
 
 class ScanCycle:
     def __init__(self):
-        self.cycles = 0 # Number of scan cycles executed
-        # Initialization of attributes related to PLC inputs, outputs, and memories
-        self.inputs = [False] * 8  # Assuming 8 digital inputs
-        self.outputs = [False] * 8  # Assuming 8 digital outputs
-        self.memory_image_inputs = [False] * 8  # Input image memory
-        self.memory_image_outputs = [False] * 8  # Output image memory
-        self.boolean_memories = [False] * 32  # Local boolean memories (32)
+        self.cycles = 0  # Número de ciclos de varredura executados
+        # Inicialização de atributos relacionados às entradas, saídas e memórias do PLC
+        self.inputs = [False] * 8  # Supondo 8 entradas digitais
+        self.outputs = [False] * 8  # Supondo 8 saídas digitais
+        self.memory_image_inputs = [False] * 8  # Memória imagem das entradas
+        self.memory_image_outputs = [False] * 8  # Memória imagem das saídas
+        self.boolean_memories = [False] * 32  # Memórias booleanas locais (32)
 
-        # Timers and Counters dictionaries
+        # Dicionários de Temporizadores e Contadores
         self.timers = {
             f"T{i+1}": Timer(name=f"T{i+1}") for i in range(32)
-        }  # Timers named T1, T2, ..., T8
+        }  # Temporizadores nomeados T1, T2, ..., T32
 
         self.counters = {
             f"C{i+1}": Counter(name=f"C{i+1}", counter_type='UP') for i in range(8)
-        }  # Counters named C1, C2, ..., C8
+        }  # Contadores nomeados C1, C2, ..., C8
 
-        self.mode = 'STOP'  # Initial mode of the PLC
+        self.mode = 'STOP'  # Modo inicial do PLC
+        self.user_program = []  # Lista para armazenar o programa do usuário
 
     def initialize_system(self):
         """
-        Initializes the system, configuring memories and initial states.
+        Inicializa o sistema, configurando memórias e estados iniciais.
         """
-        print("Initializing the system...")
+        print("Inicializando o sistema...")
         self.cycles = 0
         self.memory_image_inputs = [False] * len(self.memory_image_inputs)
         self.memory_image_outputs = [False] * len(self.memory_image_outputs)
@@ -38,132 +40,190 @@ class ScanCycle:
             timer.triggered = False
         for counter in self.counters.values():
             counter.count = 0
-        print("System initialized successfully.")
+        print("Sistema inicializado com sucesso.")
 
     def read_inputs(self):
         """
-        Reads the state of the inputs and stores it in the input image memory.
+        Lê o estado das entradas e armazena na memória imagem das entradas.
         """
         if self.mode == 'RUN':
-            print("Reading inputs...")
             self.memory_image_inputs = self.inputs.copy()
-            print(f"Inputs read: {self.memory_image_inputs}")
 
     def process_user_program(self):
         """
-        Processes the user program and applies the logic to the outputs using RPN.
+        Processa o programa do usuário e aplica a lógica às saídas usando RPN.
         """
         if self.mode == 'RUN':
-            print("Processing the user program...")
-            # TODO: Add logic for AND, OR, NOT, counters, timers, etc.
-
-            rpn_instructions = [
-            "IN1", "M1", "AND", "T1", "OR", "O1"
-            ]
-                # Pilha para armazenar operandos durante a avaliação
-        stack = []
-
-        # Loop através dos elementos da RPN
-        for token in rpn_instructions:
-            if token.startswith("IN") or token.startswith("M") or token.startswith("T"):
-                # Caso seja um operando (entrada, memória ou temporizador)
-                value = self._get_value(token)
-                stack.append(value)
-
-            elif token in ["AND", "OR", "NOT"]:
-                # Caso seja um operador, desempilhar operandos e aplicar operação
-                if token == "NOT":
-                    # NOT precisa de apenas um operando
-                    operand = stack.pop()
-                    result = not operand
-                    stack.append(result)
-                else:
-                    # AND e OR precisam de dois operandos
-                    operand2 = stack.pop()
-                    operand1 = stack.pop()
-                    if token == "AND":
-                        result = operand1 and operand2
-                    elif token == "OR":
-                        result = operand1 or operand2
-                    stack.append(result)
-
-            elif token.startswith("OUT"):
-                # Caso seja uma saída, armazenar o valor atual da pilha na saída especificada
-                output_value = stack.pop()
-                self._set_output(token, output_value)
-
-        print(f"Output image memory after processing: {self.memory_image_outputs}")
+            for line in self.user_program:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue  # Pula linhas vazias ou comentários
+                if '=' not in line:
+                    print(f"Linha inválida: {line}")
+                    continue
+                identifier, expression = line.split('=', 1)
+                identifier = identifier.strip()
+                expression = expression.strip()
+                rpn_instructions = self._convert_to_rpn(expression)
+                # Adiciona o identificador para definir a saída ou memória
+                rpn_instructions.append(identifier)
+                self._execute_rpn(rpn_instructions)
 
     def update_outputs(self):
         """
-        Updates the state of the physical or simulated outputs from the output image memory.
+        Atualiza o estado das saídas físicas ou simuladas a partir da memória imagem das saídas.
         """
         if self.mode == 'RUN':
-            print("Updating outputs...")
             self.outputs = self.memory_image_outputs.copy()
-            print(f"Outputs updated: {self.outputs}")
 
     def update_timers(self):
         """
-        Updates the state of all timers.
+        Atualiza o estado de todos os temporizadores.
         """
         for timer in self.timers.values():
             timer.update()
 
     def increment_counter(self, counter_name):
         """
-        Increments the specified counter.
+        Incrementa o contador especificado.
         """
         if counter_name in self.counters:
             self.counters[counter_name].increment()
 
     def start_timer(self, timer_name, delay, timer_type='ON DELAY'):
         """
-        Starts a timer with a specified delay (ON DELAY or OFF DELAY).
+        Inicia um temporizador com um atraso especificado (ON DELAY ou OFF DELAY).
         """
         if timer_name in self.timers:
-            self.timers[timer_name].start(delay)
-            self.timers[timer_name].type = timer_type
-            print(f"Started {timer_type} timer {timer_name} with delay {delay * 0.1} seconds.")
+            timer = self.timers[timer_name]
+            timer.preset = delay
+            timer.type = timer_type
+            timer.isActive = True
+            timer.triggered = False
 
     def scan(self):
         """
-        Executes the complete PLC scan cycle.
+        Executa o ciclo completo de varredura do PLC.
         """
         if self.mode == 'RUN':
-            print("Starting PLC scan cycle...")
             self.read_inputs()
+            self.update_timers()  # Atualiza os temporizadores como parte de cada ciclo de varredura
             self.process_user_program()
-            self.update_timers()  # Update timers as part of each scan cycle
             self.update_outputs()
             self.cycles += 1
-            print(f"Scan cycle completed. Made {self.cycles} cycles already. Returning to the beginning of the cycle...\n")
 
     def set_mode(self, mode):
         """
-        Changes the PLC operation mode (RUN, STOP, PROGRAM).
+        Altera o modo de operação do PLC (RUN, STOP, PROGRAM).
         """
         if mode in ['RUN', 'STOP', 'PROGRAM']:
             self.mode = mode
-            print(f"Changed mode to: {self.mode}")
+            print(f"Modo alterado para: {self.mode}")
         else:
-            print("Invalid mode. Valid modes: RUN, STOP, PROGRAM.")
+            print("Modo inválido. Modos válidos: RUN, STOP, PROGRAM.")
 
+    def _get_value(self, token):
+        """
+        Retorna o valor associado a um token (IN1, I1, M1, T1, etc.).
+        """
+        token_upper = token.upper()
+        if token_upper.startswith("IN") or token_upper.startswith("I"):
+            index_str = token_upper.lstrip("IN").lstrip("I")
+            if index_str.isdigit():
+                index = int(index_str) - 1
+                return self.memory_image_inputs[index]
+            else:
+                raise ValueError(f"Token de entrada inválido: {token}")
+        elif token_upper.startswith("M"):
+            index = int(token_upper[1:]) - 1
+            return self.boolean_memories[index]
+        elif token_upper.startswith("T"):
+            timer_name = token_upper
+            timer = self.timers.get(timer_name)
+            if timer:
+                return timer.triggered
+            else:
+                raise ValueError(f"Temporizador desconhecido: {token}")
+        elif token_upper.startswith("O"):
+            index = int(token_upper[1:]) - 1
+            return self.memory_image_outputs[index]
+        else:
+            raise ValueError(f"Token desconhecido: {token}")
 
-# Example of usage
-if __name__ == "__main__":
-    scan_cycle = ScanCycle()
-    scan_cycle.initialize_system()
+    def _set_output(self, token, value):
+        """
+        Define o valor de uma saída (O1, O2, etc.) ou memória (M1, M2, etc.).
+        """
+        token_upper = token.upper()
+        if token_upper.startswith("O"):
+            index = int(token_upper[1:]) - 1
+            self.memory_image_outputs[index] = value
+        elif token_upper.startswith("M"):
+            index = int(token_upper[1:]) - 1
+            self.boolean_memories[index] = value
+        else:
+            raise ValueError(f"Token de saída desconhecido: {token}")
 
-    # Simulating inputs
-    scan_cycle.set_mode('RUN')
-    scan_cycle.inputs = [True, False, True, False, True, True, False, False]
+    def _convert_to_rpn(self, expression):
+        """
+        Converte uma expressão lógica em Notação Polonesa Reversa (RPN) usando o algoritmo Shunting Yard.
+        """
+        # Remover espaços em branco
+        expression = expression.replace(' ', '')
+        # Definir o padrão regex para tokenização
+        token_pattern = r'(\bNOT\b|\(|\)|\^|\||\b[A-Za-z][A-Za-z0-9]*\b)'
+        tokens = re.findall(token_pattern, expression)
+        output_queue = []
+        operator_stack = []
+        precedence = {'NOT': 3, '^': 2, '|': 1}
+        associativity = {'NOT': 'right', '^': 'left', '|': 'left'}
 
-    # Start ON DELAY timer T1 with a delay of 5 cycles (0.5 seconds)
-    scan_cycle.start_timer("T1", 5, 'ON DELAY')
-    # Start OFF DELAY timer T2 with a delay of 8 cycles (0.8 seconds)
-    scan_cycle.start_timer("T2", 8, 'OFF DELAY')
+        for token in tokens:
+            token_upper = token.upper()
+            if token_upper in precedence:
+                while (operator_stack and operator_stack[-1] != '(' and
+                       ((associativity[token_upper] == 'left' and precedence[token_upper] <= precedence[operator_stack[-1]]) or
+                        (associativity[token_upper] == 'right' and precedence[token_upper] < precedence[operator_stack[-1]]))):
+                    output_queue.append(operator_stack.pop())
+                operator_stack.append(token_upper)
+            elif token == '(':
+                operator_stack.append(token)
+            elif token == ')':
+                while operator_stack and operator_stack[-1] != '(':
+                    output_queue.append(operator_stack.pop())
+                operator_stack.pop()  # Remove '('
+            else:
+                output_queue.append(token_upper)
+        while operator_stack:
+            output_queue.append(operator_stack.pop())
 
-    # Executing the scan cycle multiple times to observe timer behavior
-    for _ in range(10):
-        scan_cycle.scan()
+        return output_queue
+
+    def _execute_rpn(self, rpn_instructions):
+        """
+        Executa as instruções em RPN e atualiza as saídas.
+        """
+        stack = []
+        for token in rpn_instructions:
+            token_upper = token.upper()
+            if token_upper in ['^', '|', 'NOT']:
+                if token_upper == 'NOT':
+                    operand = stack.pop()
+                    result = not operand
+                    stack.append(result)
+                else:
+                    operand2 = stack.pop()
+                    operand1 = stack.pop()
+                    if token_upper == '^':
+                        result = operand1 and operand2
+                    elif token_upper == '|':
+                        result = operand1 or operand2
+                    stack.append(result)
+            elif token_upper.startswith('O') or token_upper.startswith('M'):
+                # É uma saída ou memória, define seu valor
+                value = stack.pop()
+                self._set_output(token_upper, value)
+            else:
+                # É um operando, empurra seu valor na pilha
+                value = self._get_value(token_upper)
+                stack.append(value)
