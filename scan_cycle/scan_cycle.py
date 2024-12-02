@@ -1,5 +1,9 @@
 from components.counter import Counter
 from components.timer import Timer
+from reverse_polish_notation.logical_structure import LogicalStructure
+from reverse_polish_notation.create_notation import reverse_polish_notation
+from reverse_polish_notation.resolve_notation import resolve
+from automata.sentence_interpreter import interpretSentence, simplifySentece, tokenize
 
 class ScanCycle:
     def __init__(self, logical_structure):
@@ -50,9 +54,34 @@ class ScanCycle:
             self.memory_image_inputs = self.inputs.copy()
             print(f"Inputs read: {self.memory_image_inputs}")
 
+    def load_user_program(self, sentence):
+        """
+        Carrega o programa do usuário, simplifica, valida, e converte para RPN.
+        """
+        # Simplificar a sentença
+        simplified_sentence, simplify_error = simplifySentece(sentence)
+        if simplify_error:
+            print("Erro durante a simplificação da sentença. Programa inválido.")
+            return
+        
+        # Validar a sentença com o autômato
+        validation_result = interpretSentence(simplified_sentence)
+        if validation_result != 0:
+            print("Erro de validação da sentença. Programa inválido.")
+            return
+        
+        # Converter para notação polonesa reversa
+        tokens = tokenize(simplified_sentence)
+        rpn_notation = reverse_polish_notation(tokens)
+        
+        # Atualizar a estrutura lógica com a notação polonesa
+        self.logical_structure.updatePolishNotations([('program1', rpn_notation)])
+
+        print(f"Programa carregado com sucesso: {rpn_notation}")
+
     def process_user_program(self):
         """
-        Processes the user program and applies the logic to the outputs using RPN.
+        Processa o programa do usuário aplicando a lógica da notação polonesa reversa.
         """
         if self.mode == 'RUN':
             print("Processing the user program...")
@@ -62,8 +91,9 @@ class ScanCycle:
             self.logical_structure.updateBooleans(self.boolean_memories)
 
             # Executar o processamento e atualizar as saídas
-            for identifier, rpn in self.logical_structure.notations:
-                result = self.logical_structure.resolve(rpn)
+            for identifier, rpn in self.logical_structure.polishNotations:
+                result = resolve(rpn, self.memory_image_inputs, self.memory_image_outputs,
+                                 self.boolean_memories, self.timers, self.counters)
 
                 # Verificar se é um temporizador ou contador
                 if identifier.startswith("T"):  # Temporizador
