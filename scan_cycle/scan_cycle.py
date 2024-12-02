@@ -56,13 +56,33 @@ class ScanCycle:
         """
         if self.mode == 'RUN':
             print("Processing the user program...")
-            # TODO: Add logic for AND, OR, NOT, counters, timers, etc.
+
             # Atualizar entradas na estrutura lógica
             self.logical_structure.updateInputs(self.memory_image_inputs)
             self.logical_structure.updateBooleans(self.boolean_memories)
 
             # Executar o processamento e atualizar as saídas
-            self.memory_image_outputs = self.logical_structure.updateOutputs()
+            for identifier, rpn in self.logical_structure.notations:
+                result = self.logical_structure.resolve(rpn)
+
+                # Verificar se é um temporizador ou contador
+                if identifier.startswith("T"):  # Temporizador
+                    timer = self.timers.get(identifier)
+                    if timer:
+                        timer.start(result)  # Usar o valor da instrução para definir ou resetar o temporizador
+                elif identifier.startswith("C"):  # Contador
+                    counter = self.counters.get(identifier)
+                    if counter:
+                        if counter.type == 'UP':
+                            counter.increment()
+                        elif counter.type == 'DOWN':
+                            counter.decrement()
+
+                # Atualizar memórias ou saídas
+                if identifier.startswith("O"):  # Saída
+                    index = int(identifier[1:]) - 1
+                    if 0 <= index < len(self.memory_image_outputs):
+                        self.memory_image_outputs[index] = result
 
             print(f"Output image memory after processing: {self.memory_image_outputs}")
 
