@@ -59,7 +59,7 @@ class ScanCycle:
             # TODO: Add logic for AND, OR, NOT, counters, timers, etc.
 
             rpn_instructions = [
-            "IN1", "M1", "AND", "T1", "OR", "O1"
+            "IN1", "M1", "^", "T1", "|", "O1"
             ]
                 # Pilha para armazenar operandos durante a avaliação
         stack = []
@@ -71,9 +71,9 @@ class ScanCycle:
                 value = self._get_value(token)
                 stack.append(value)
 
-            elif token in ["AND", "OR", "NOT"]:
+            elif token in ["^", "|", "!"]:
                 # Caso seja um operador, desempilhar operandos e aplicar operação
-                if token == "NOT":
+                if token == "!":
                     # NOT precisa de apenas um operando
                     operand = stack.pop()
                     result = not operand
@@ -82,13 +82,13 @@ class ScanCycle:
                     # AND e OR precisam de dois operandos
                     operand2 = stack.pop()
                     operand1 = stack.pop()
-                    if token == "AND":
+                    if token == "^":
                         result = operand1 and operand2
-                    elif token == "OR":
+                    elif token == "|":
                         result = operand1 or operand2
                     stack.append(result)
 
-            elif token.startswith("OUT"):
+            elif token.startswith("O"):
                 # Caso seja uma saída, armazenar o valor atual da pilha na saída especificada
                 output_value = stack.pop()
                 self._set_output(token, output_value)
@@ -149,6 +149,52 @@ class ScanCycle:
             print(f"Changed mode to: {self.mode}")
         else:
             print("Invalid mode. Valid modes: RUN, STOP, PROGRAM.")
+
+    def _get_value(self, token):
+        """
+        Retorna o valor associado ao token (entrada, memória, temporizador, etc.).
+        """
+        if token.startswith("IN"):
+            # Entrada digital
+            index = int(token[2:]) - 1  # Extrai o número da entrada
+            self.memory_image_inputs[index]
+        elif token.startswith("M"):
+            # Memória booleana
+            index = int(token[1:]) - 1  # Extrai o número da memória
+            self.boolean_memories[index]
+        elif token.startswith("T"):
+            # Temporizador
+            timer_name = token  # Nome do temporizador
+            if timer_name in self.timers:
+                self.timers[timer_name].triggered  # Retorna se o temporizador está ativo
+        elif token.startswith("C"):
+            # Contador
+            counter_name = token  # Nome do contador
+            if counter_name in self.counters:
+                self.counters[counter_name].count > 0  # Retorna True se o contador está maior que 0
+        else:
+            raise ValueError(f"Token inválido: {token}")
+
+    def _set_output(self, token, value):
+        """
+        Define o valor de uma saída específica no array de saídas.
+        
+        Args:
+            token (str): Nome da saída (por exemplo, "O1").
+            value (bool): Valor lógico a ser atribuído à saída.
+        """
+        if token.startswith("O") and token[1:].isdigit():
+            # Extrai o número da saída
+            index = int(token[1:]) - 1  # Exemplo: "O1" -> índice 0
+            if 0 <= index < len(self.memory_image_outputs):
+                self.memory_image_outputs[index] = value
+                print(f"Output {token} definido para {value}.")
+            else:
+                raise ValueError(f"Índice de saída inválido: {index}")
+        else:
+            raise ValueError(f"Token inválido para saída: {token}")
+
+
 
 
 # Example of usage
