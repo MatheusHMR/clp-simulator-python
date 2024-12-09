@@ -1,274 +1,311 @@
 import PySimpleGUI as sg
-from views import authors, error, program_help, compile_success, confirm_new, file_controller
+from components.timer import Timer
+from components.counter import Counter
+# Remover a importação de LogicalStructure
+# from reverse_polish_notation.create_notation import reverse_polish_notation
+# from reverse_polish_notation.logical_structure import LogicalStructure
+from views import (
+    authors,
+    error,
+    program_help,
+    compile_success,
+    confirm_new,
+    file_controller,
+)
 import automata.sentence_interpreter as senInt
-#from reverse_polish_notation import create_notation, logical_structure
-import reverse_polish_notation.create_notation as create_notation
-import reverse_polish_notation.logical_structure as logical_structure
 import communication as comm
 from scan_cycle.scan_cycle import ScanCycle
 
 
 
 
-sg.theme('DarkBlue') #Add a touch of color
-logicalStructure = logical_structure.LogicalStructure([]) #Creating an empty logicalStructure
-inExecution = False
-isConnected = False
-serialPort = comm.initializeSerial()
-scan_cycle = ScanCycle(logicalStructure)
+# Importar a classe ScanCycle
+# Supondo que a classe ScanCycle esteja em um arquivo chamado scan_cycle.py
+from scan_cycle.scan_cycle import ScanCycle
 
-current_mode = 'STOP'
+class PLCProgrammer:
+    def __init__(self):
+        # Inicialização de variáveis
+        # Substituir LogicalStructure por ScanCycle
+        self.scan_cycle = ScanCycle()
+        self.in_execution = False
+        self.is_connected = False
+        self.serial_port = comm.initializeSerial()
+        self.timer_values = {f'T{i+1}': 0 for i in range(32)}
+        self.setup_gui()
 
+    def setup_gui(self):
+        sg.theme('DarkBlue14')  # Tema mais moderno
+        # Definir ícones e fontes para um visual mais profissional
+        menu_layout = [
+            ['Arquivo', ['Novo      Ctrl+N', 'Abrir     Ctrl+O', 'Salvar    Ctrl+S', '---', 'Sair']],
+            ['Ferramentas', ['Compilar  F9', 'Configurar Temporizadores']],
+            ['CLP', ['Conectar', 'Executar  F5', 'Parar']],
+            ['Ajuda', ['Sobre', 'Como Programar']],
+        ]
 
-#All the stuff inside your window.
-menu_def = [['Programa', ['Novo', 'Abrir', 'Salvar']],
-            ['Comandos', ['Compilar']],
-            ['CLP', ['Conectar', 'Modo', ['RUN', 'STOP', 'PROGRAM']]],
-            ['Ajuda', ['Sobre...', 'Programar']],
-            ]
+        # Barra de ferramentas com botões usando símbolos Unicode
+        toolbar = [
+            sg.Button('🗎 Novo', tooltip='Novo (Ctrl+N)', key='Novo'),
+            sg.Button('📂 Abrir', tooltip='Abrir (Ctrl+O)', key='Abrir'),
+            sg.Button('💾 Salvar', tooltip='Salvar (Ctrl+S)', key='Salvar'),
+            sg.Button('🔄 Compilar', tooltip='Compilar (F9)', key='Compilar'),
+            sg.Button('▶ Executar', tooltip='Executar (F5)', key='Executar'),
+            sg.Button('⏹ Parar', tooltip='Parar', key='Parar'),
+            sg.Button('⚙ Configurar Temporizadores', tooltip='Configurar Temporizadores', key='Configurar Temporizadores'),
+            sg.Button('🔌 Conectar', tooltip='Conectar', key='Conectar'),
+            sg.Button('❓ Ajuda', tooltip='Ajuda', key='Sobre'),
+        ]
 
-#Layout columns
-input_col = sg.Column([
-    [sg.Text('Entradas:')],
-    [sg.Text("I1:"), sg.Text('False', key='k_i1_state')],
-    [sg.Text("I2:"), sg.Text('False', key='k_i2_state')],
-    [sg.Text("I3:"), sg.Text('False', key='k_i3_state')],
-    [sg.Text("I4:"), sg.Text('False', key='k_i4_state')],
-    [sg.Text("I5:"), sg.Text('False', key='k_i5_state')],
-    [sg.Text("I6:"), sg.Text('False', key='k_i6_state')],
-    [sg.Text("I7:"), sg.Text('False', key='k_i7_state')],
-    [sg.Text("I8:"), sg.Text('False', key='k_i8_state')]
-])
+        # Área de programação com numeração de linhas
+        programming_area = sg.Frame('', [
+            [sg.Multiline('', size=(80, 25), key='-PROGRAM-', font='Consolas 12', autoscroll=True, expand_x=True, expand_y=True)]
+        ], relief=sg.RELIEF_SUNKEN)
 
-output_col = sg.Column([
-    [sg.Text('Saídas:')],
-    [sg.Text("O1:"), sg.Text('False', key='k_o1_state')],
-    [sg.Text("O2:"), sg.Text('False', key='k_o2_state')],
-    [sg.Text("O3:"), sg.Text('False', key='k_o3_state')],
-    [sg.Text("O4:"), sg.Text('False', key='k_o4_state')],
-    [sg.Text("O5:"), sg.Text('False', key='k_o5_state')],
-    [sg.Text("O6:"), sg.Text('False', key='k_o6_state')],
-    [sg.Text("O7:"), sg.Text('False', key='k_o7_state')],
-    [sg.Text("O8:"), sg.Text('False', key='k_o8_state')]
-])
+        # Visualização gráfica do CLP
+        plc_viewer = sg.Frame('Monitoramento do CLP', [
+            [sg.Text('Status de Conexão:', size=(20, 1)), sg.Text('Desconectado', key='-CONN_STATUS-', text_color='red')],
+            [sg.Text('Status de Execução:', size=(20, 1)), sg.Text('Parado', key='-EXEC_STATUS-', text_color='red')],
+            [sg.HorizontalSeparator()],
+            [sg.TabGroup([
+                [sg.Tab('Entradas/Saídas', self.create_io_layout())],
+                [sg.Tab('Memórias', self.create_memory_layout())],
+                [sg.Tab('Temporizadores', self.create_timer_layout())],
+            ], expand_x=True, expand_y=True)]
+        ], expand_x=True, expand_y=True)
 
-boolean_col_left = sg.Column([
-    [sg.Text('B1:'), sg.Text('False', key='k_b1_state')],
-    [sg.Text('B2:'), sg.Text('False', key='k_b2_state')],
-    [sg.Text('B3:'), sg.Text('False', key='k_b3_state')],
-    [sg.Text('B4:'), sg.Text('False', key='k_b4_state')],
-    [sg.Text('B5:'), sg.Text('False', key='k_b5_state')],
-    [sg.Text('B6:'), sg.Text('False', key='k_b6_state')],
-    [sg.Text('B7:'), sg.Text('False', key='k_b7_state')],
-    [sg.Text('B8:'), sg.Text('False', key='k_b8_state')],
-])
+        # Layout principal
+        layout = [
+            [sg.Menu(menu_layout)],
+            toolbar,
+            [sg.Pane([programming_area, plc_viewer], orientation='h', relief=sg.RELIEF_RIDGE, expand_x=True, expand_y=True)]
+        ]
 
-boolean_col_right = sg.Column([
-    [sg.Text('B9:'), sg.Text('False', key='k_b9_state')],
-    [sg.Text('B10:'), sg.Text('False', key='k_b10_state')],
-    [sg.Text('B11:'), sg.Text('False', key='k_b11_state')],
-    [sg.Text('B12:'), sg.Text('False', key='k_b12_state')],
-    [sg.Text('B13:'), sg.Text('False', key='k_b13_state')],
-    [sg.Text('B14:'), sg.Text('False', key='k_b14_state')],
-    [sg.Text('B15:'), sg.Text('False', key='k_b15_state')],
-    [sg.Text('B16:'), sg.Text('False', key='k_b16_state')],
-])
+        self.window = sg.Window('PLC Programmer', layout, finalize=True, resizable=True)
 
-left_col = sg.Column([
-    [sg.Text('Área de Programação')],
-    [sg.Multiline('', size=(50), expand_y=True, key='k_input_area')]
-], expand_y=True)
+        # Bindings dos atalhos de teclado
+        self.window.bind('<Control-n>', 'Novo')
+        self.window.bind('<Control-o>', 'Abrir')
+        self.window.bind('<Control-s>', 'Salvar')
+        self.window.bind('<F5>', 'Executar')
+        self.window.bind('<F9>', 'Compilar')
 
-right_col = sg.Column([
-    [sg.Text('Informações do CLP')],
-    [sg.Text('Não Conectado', key='k_conn_text')],
-    [sg.Text('Modo: STOP', key='k_mode_text')],
-    [sg.Text('Não Executando', key='k_exec_text')],
-    [input_col, output_col],
-    [sg.Text('Mem. Booleanas:')],
-    [boolean_col_left, boolean_col_right],
-    ], vertical_alignment='top')
+    def create_io_layout(self):
+        inputs = [[sg.Checkbox(f'I{i+1}', key=f'-IN-{i+1}-', enable_events=True)] for i in range(8)]
+        outputs = [[sg.Checkbox(f'O{i+1}', key=f'-OUT-{i+1}-', disabled=True)] for i in range(8)]
+        layout = [
+            [sg.Frame('Entradas Digitais', inputs, expand_y=True), sg.Frame('Saídas Digitais', outputs, expand_y=True)]
+        ]
+        return layout
 
+    def create_memory_layout(self):
+        booleans = [[sg.Text(f'B{i+1}:', size=(5, 1)), sg.Text('False', key=f'-BOOL-{i+1}-')] for i in range(32)]
+        layout = [
+            [sg.Column(booleans, scrollable=True, vertical_scroll_only=True, size=(200, 300))]
+        ]
+        return layout
 
-#Window Layout
-layout = [  [sg.Menu(menu_def)],
-            [left_col, right_col]]
+    def create_timer_layout(self):
+        timers = [[sg.Text(f'T{i+1}:', size=(5, 1)), sg.Text('0', key=f'-TIMER-{i+1}-')] for i in range(32)]
+        layout = [
+            [sg.Column(timers, scrollable=True, vertical_scroll_only=True, size=(200, 300))]
+        ]
+        return layout
 
-#Create the Window
-window = sg.Window('clp-programmer v0.1', layout)
+    def start(self):
+        while True:
+            event, values = self.window.read(timeout=100)
+            if event in (sg.WIN_CLOSED, 'Sair'):
+                break
+            elif event in ('Novo', 'Abrir', 'Salvar', 'Compilar', 'Configurar Temporizadores', 'Conectar', 'Executar', 'Parar', 'Sobre', 'Como Programar'):
+                self.handle_menu_events(event, values)
+            elif event.startswith('-IN-'):
+                self.handle_input_change(event, values)
+            if self.in_execution:
+                self.execute_cycle()
+        self.window.close()
 
-#Functions
-def compileProgram(program): #Compiles the program. Each individual line is submited to the syntax check
-    programLines = program.splitlines()
-    errorList = []
-    i = 1
-    for line in programLines: #Test each progrma line
-        res = senInt.interpretSentece(line)
-        if(res != 0):
-            if(res == 1):
-                errorList.append(f'Erro de sintaxe linha {i}')
-            if(res == 2):
-                errorList.append(f'Erro de rótulo linha {i}')
-        i += 1
-    
-    if(len(errorList) != 0): #Error list is not empty
-        error.errorWindow('Erro!', 'Erros de compilação detectados, verifique a ajuda.')
-    else:
-        polishNotations = []
-        for line in programLines: #Generate one polish tuple for each line in program
-            line = line.replace(' ','')
-            line = line.upper()
-            newPolish = create_notation.reverse_polish_notation(line)
-            identifier = line.split('=')[0]
-            polishNotations.append((identifier, newPolish)) #Pushes the tuple into the array
+    def handle_menu_events(self, event, values):
+        if event == 'Novo':
+            self.new_program()
+        elif event == 'Abrir':
+            self.open_program()
+        elif event == 'Salvar':
+            self.save_program()
+        elif event == 'Compilar':
+            self.compile_program(values['-PROGRAM-'])
+        elif event == 'Configurar Temporizadores':
+            self.configure_timers()
+        elif event == 'Conectar':
+            self.connect_clp()
+        elif event == 'Executar':
+            self.run_program()
+        elif event == 'Parar':
+            self.stop_program()
+        elif event == 'Sobre':
+            self.show_about()
+        elif event == 'Como Programar':
+            self.show_help()
 
-        logicalStructure.updatePolishNotations(polishNotations)
-        print(logicalStructure)
-        compile_success.compileSuccessWindow()
+    def handle_input_change(self, event, values):
+        # Atualiza o estado das entradas na scan_cycle
+        index = int(event.replace('-IN-', '').replace('-', '')) - 1
+        self.scan_cycle.inputs[index] = values[event]
+        self.scan_cycle.memory_image_inputs[index] = values[event]
 
-def executeProgram():
-    scan_cycle.scan()
-    updateScreenValues()
+    def new_program(self):
+        if confirm_new.confirmNewProgram():
+            self.window['-PROGRAM-'].update('')
+            self.in_execution = self.update_execution_status(False)
+            self.scan_cycle.initialize_system()
 
-   
-def updateScreenValues():
-    inputs = scan_cycle.inputs
-    outputs = scan_cycle.outputs
-    bools = scan_cycle.boolean_memories
+    def open_program(self):
+        self.window.hide()
+        if confirm_new.confirmNewProgram():
+            path = file_controller.openFileWindow()
+            if path:
+                try:
+                    with open(path, 'r') as file:
+                        program = file.read()
+                    self.window['-PROGRAM-'].update(program)
+                except:
+                    error.errorWindow('Erro!', 'Não foi possível abrir o arquivo especificado.')
+        self.window.un_hide()
 
-    for i in range(8):
-        keyInput = f'k_i{i+1}_state'
-        keyOutput = f'k_o{i+1}_state'
-        window[keyInput].update(inputs[i])
-        window[keyOutput].update(outputs[i])
+    def save_program(self):
+        self.window.hide()
+        path = file_controller.saveFileWindow()
+        if path:
+            program = self.window['-PROGRAM-'].get()
+            try:
+                with open(path, 'w') as file:
+                    file.write(program)
+            except:
+                error.errorWindow('Erro!', 'Não foi possível salvar o arquivo no caminho especificado.')
+        self.window.un_hide()
 
-    for i in range(16):
-        keyBoolean = f'k_b{i+1}_state'
-        window[keyBoolean].update(bools[i])
-        i += 1
-
-def saveProgram():
-    path = file_controller.saveFileWindow()
-    program = window['k_input_area'].get()
-    print(f'Filepath: {path}')
-    try:
-        file = open(path, 'w')
-        file.write(program)
-        file.close()
-    except:
-        error.errorWindow('Erro!','Não foi possivel salvar o arquivo no caminho especificado.')
-
-def openProgram():
-    path = file_controller.openFileWindow()
-    try:
-        file = open(path, 'r')
-        program = file.read()
-        file.close()
-        return program
-    except:
-        error.errorWindow('Erro!', 'Não foi possível abrir o arquivo especificado.')
-        return ''
-
-def setConnected(bool):
-    if(bool == True):
-        window['k_conn_text'].update(f'Conectado ao CLP ({serialPort.port})')
-        return True
-    else:
-        window['k_conn_text'].update('Não Conectado')
-        return False
-
-def setExecution(bool):
-    if(bool == True):
-        window['k_exec_text'].update('Em Execução')
-        return True
-    else:
-        window['k_exec_text'].update('Não Executando')
-        return False
-    
-def set_mode(mode):
-    global current_mode
-    current_mode = mode
-    scan_cycle.set_mode(mode)
-    window['k_mode_text'].update(f'Modo: {current_mode}')
-    print(f'Modo alterado para: {current_mode}')
-    update_editing_state()
-
-def update_editing_state():
-    if current_mode == 'PROGRAM':
-        window['k_input_area'].update(disabled=False)
-    else:
-        window['k_input_area'].update(disabled=True)
-
-#Event Loop to process "events" and get the "values" of the inputs
-while True:
-    event, values = window.read(timeout=250) #Awaits 10ms for an event
-    if event == sg.WIN_CLOSED: #if user closes window
-        break
-
-    #Answering to commands on screen menu
-    if event == 'Novo':
-        if(confirm_new.confirmNewProgram()):
-            window['k_input_area'].update('')
-            inExecution = setExecution(False)
-    elif event == 'Abrir':
-        print('Abrir')
-        window.disappear()
-        if(confirm_new.confirmNewProgram()):
-            program = openProgram()
-            window['k_input_area'].update(program)
-        window.reappear()
-    elif event == 'Salvar':
-        print('Salvar')
-        window.disappear()
-        saveProgram()
-        window.reappear()
-    elif event == 'Compilar':
-        print('Compilar')
-        setExecution(False)
-        program = window['k_input_area'].get()
-        if(len(program) == 0):
-            error.errorWindow('Erro!','A área de programação está vazia.')
+    def compile_program(self, program_text):
+        if not program_text.strip():
+            error.errorWindow('Erro!', 'A área de programação está vazia.')
+            return
+        self.in_execution = self.update_execution_status(False)
+        program_lines = program_text.strip().splitlines()
+        errors = []
+        for idx, line in enumerate(program_lines):
+            res = senInt.interpretSentece(line)
+            if res == 1:
+                errors.append(f'Erro de sintaxe na linha {idx + 1}')
+            elif res == 2:
+                errors.append(f'Erro de rótulo na linha {idx + 1}')
+        if errors:
+            error.errorWindow('Erro!', '\n'.join(errors))
         else:
-            compileProgram(program)
-    elif event == 'Conectar':
-        print('Conectar')
-        if(serialPort != 'none'):
-            if(comm.estabilishConnection(serialPort) == True):
-                isConnected = setConnected(True)
+            # Armazenar o programa do usuário na scan_cycle
+            self.scan_cycle.user_program = program_lines
+            compile_success.compileSuccessWindow()
+
+    def configure_timers(self):
+        timer_layout = [
+            [sg.Text(f'T{i+1}:', size=(5, 1)), sg.InputText(self.timer_values[f'T{i+1}'], key=f'T{i+1}', size=(5, 1))]
+            for i in range(32)
+        ]
+        layout = [
+            [sg.Column(timer_layout, scrollable=True, vertical_scroll_only=True, size=(250, 400))],
+            [sg.Button('Salvar'), sg.Button('Cancelar')]
+        ]
+        window = sg.Window('Configurar Temporizadores', layout, modal=True)
+        while True:
+            event, values = window.read()
+            if event in (sg.WIN_CLOSED, 'Cancelar'):
+                break
+            elif event == 'Salvar':
+                for key in self.timer_values.keys():
+                    try:
+                        self.timer_values[key] = int(values[key])
+                        self.window[f'-TIMER-{key[1:]}-'].update(values[key])
+                        # Atualizar o preset do temporizador na scan_cycle
+                        self.scan_cycle.timers[key].preset = int(values[key])
+                    except ValueError:
+                        sg.popup(f'Valor inválido para {key}. Por favor, insira um número inteiro.')
+                sg.popup('Temporizadores atualizados com sucesso.')
+                break
+        window.close()
+
+    def connect_clp(self):
+        if self.serial_port != 'none':
+            if comm.estabilishConnection(self.serial_port):
+                self.is_connected = self.update_connection_status(True)
             else:
-                isConnected = setConnected(False)
-                error.errorWindow('Erro!', 'Não foi possível conectar ao dispositivo')
+                self.is_connected = self.update_connection_status(False)
+                error.errorWindow('Erro!', 'Não foi possível conectar ao dispositivo.')
         else:
-            error.errorWindow('Erro!', 'Nenhum dispositivo foi detectado')
-    elif event == 'Executar':
-        print('Executar')
-        if(isConnected):
-            inExecution = setExecution(True)
-        else:
-            error.errorWindow('Erro!', 'Não há dispositivo conectado')
-    elif event == 'Parar':
-        print('Parar')
-        logicalStructure.resetStructure()
-        comm.sendLedByte(serialPort, b'@00000000#')
-        updateScreenValues(logicalStructure.inputs, logicalStructure.outputs, logicalStructure.booleans)
-        inExecution = setExecution(False)
-        isConnected = setConnected(False)
-    elif event == 'Sobre...':
-        window.disappear()
-        authors.authorsWindow()
-        window.reappear()
-    elif event == 'Programar':
-        window.disappear()
+            error.errorWindow('Erro!', 'Nenhum dispositivo foi detectado.')
+
+    def run_program(self):
+        # if self.is_connected:
+        self.scan_cycle.set_mode('RUN')
+        self.in_execution = self.update_execution_status(True)
+        # else:
+            # error.errorWindow('Erro!', 'Nenhum dispositivo conectado.')
+
+    def stop_program(self):
+        self.scan_cycle.set_mode('STOP')
+        self.scan_cycle.initialize_system()
+        comm.sendLedByte(self.serial_port, b'@00000000#')
+        self.update_io_values([False]*8, [False]*8, [False]*32)
+        self.in_execution = self.update_execution_status(False)
+        self.is_connected = self.update_connection_status(False)
+
+    def show_about(self):
+        sg.popup('PLC Programmer\nVersão 1.0\nDesenvolvido por Sua Empresa', title='Sobre')
+
+    def show_help(self):
         program_help.programHelpWindow()
-        window.reappear()
-    if event == 'RUN':
-        set_mode('RUN')
-    elif event == 'STOP':
-        set_mode('STOP')
-    elif event == 'PROGRAM':
-        set_mode('PROGRAM')
 
-    if current_mode == 'RUN':
-        executeProgram()
+    def execute_cycle(self):
+        # Simulação de leitura de entradas
+        inputs = [self.window[f'-IN-{i+1}-'].get() for i in range(8)]
+        self.scan_cycle.inputs = inputs
+        self.scan_cycle.read_inputs()
+        # Atualização dos temporizadores
+        self.scan_cycle.update_timers()
+        # Processamento do programa do usuário
+        self.scan_cycle.process_user_program()
+        # Atualização das saídas
+        self.scan_cycle.update_outputs()
+        # Atualizar as saídas na interface
+        for i, val in enumerate(self.scan_cycle.outputs):
+            self.window[f'-OUT-{i+1}-'].update(value=val)
+        # Atualização das memórias booleanas
+        for i, val in enumerate(self.scan_cycle.boolean_memories):
+            self.window[f'-BOOL-{i+1}-'].update(value=str(val))
+        # Atualização dos temporizadores na interface
+        for i in range(32):
+            timer_name = f'T{i+1}'
+            timer_value = self.scan_cycle.timers[timer_name].remaining_time
+            self.window[f'-TIMER-{i+1}-'].update(value=str(timer_value))
 
-window.close()
+    def update_io_values(self, inputs, outputs, booleans):
+        for i, val in enumerate(inputs):
+            self.window[f'-IN-{i+1}-'].update(value=val)
+            self.scan_cycle.inputs[i] = val
+            self.scan_cycle.memory_image_inputs[i] = val
+        for i, val in enumerate(outputs):
+            self.window[f'-OUT-{i+1}-'].update(value=val)
+            self.scan_cycle.outputs[i] = val
+            self.scan_cycle.memory_image_outputs[i] = val
+        for i, val in enumerate(booleans):
+            self.window[f'-BOOL-{i+1}-'].update(value=str(val))
+            self.scan_cycle.boolean_memories[i] = val
+
+    def update_connection_status(self, status):
+        self.window['-CONN_STATUS-'].update('Conectado' if status else 'Desconectado', text_color='green' if status else 'red')
+        return status
+
+    def update_execution_status(self, status):
+        self.window['-EXEC_STATUS-'].update('Executando' if status else 'Parado', text_color='green' if status else 'red')
+        return status
+
+if __name__ == '__main__':
+    app = PLCProgrammer()
+    app.start()
