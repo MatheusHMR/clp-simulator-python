@@ -10,7 +10,7 @@ class ScanCycle:
         self.outputs = [False] * 8  # 8 saídas digitais
         self.memory_image_inputs = [False] * 8  # Memória imagem das entradas
         self.memory_image_outputs = [False] * 8  # Memória imagem das saídas
-        self.boolean_memories = [False] * 32  # Memórias booleanas locais (32)
+        self.boolean_memories = [False] * 32  # Memórias booleanas locais (B1,B2,...B32)
         self.logical_structure = logical_structure
 
         # Dicionários de Temporizadores e Contadores
@@ -30,9 +30,6 @@ class ScanCycle:
         self.prev_counter_coils = {}  # Estado anterior das bobinas CUPx/CDNx
 
     def initialize_system(self):
-        """
-        Inicializa o sistema, resetando memórias e timers.
-        """
         print("Inicializando o sistema...")
         self.cycles = 0
         self.memory_image_inputs = [False] * len(self.memory_image_inputs)
@@ -168,7 +165,6 @@ class ScanCycle:
         contact_pattern = r'^(TON|TOF)O(\d+)$'
         contact_match = re.match(contact_pattern, token_upper)
         if contact_match:
-            timer_type = contact_match.group(1)
             timer_num = contact_match.group(2)
             timer_name = f"T{timer_num}"
             timer = self.timers.get(timer_name)
@@ -316,46 +312,64 @@ class ScanCycle:
                 # Armazena o estado dessa bobina no ciclo atual
                 self.counter_coils[coil_full_name] = coil_value
 
-            elif token_upper.startswith('O') or token_upper.startswith('M'):
-                # É uma saída ou memória
-                value = stack.pop()
-                self._set_output(token_upper, value)
+            elif token_upper.startswith('O') or token_upper.startswith('B'):
+                # É uma saída ou memória booleana
+                # Se for o último token (identificador), é destino de atribuição
+                # Caso contrário, é um operando, apenas empilhar seu valor
+                if token == rpn_instructions[-1]:
+                    # Identificador final: atribui o valor
+                    value = stack.pop()
+                    self._set_output(token_upper, value)
+                else:
+                    # Apenas obter valor
+                    value = self._get_value(token_upper)
+                    stack.append(value)
 
             else:
-                # Operando (entrada, memória, contador contato, etc.)
+                # Operando (entrada, contador contato sem bobina, etc.)
                 value = self._get_value(token_upper)
                 stack.append(value)
 
     def _set_timer(self, timer_name, timer_type, coil_value):
-        """
-        Ajusta o estado do temporizador conforme a bobina recebida.
-        """
         timer = self.timers.get(timer_name)
         if not timer:
             raise ValueError(f"Temporizador desconhecido: {timer_name}")
 
-        # Ajusta o tipo do temporizador baseado no token
         if timer_type == "TON":
             timer.type = 'ON DELAY'
+            # ON DELAY:
+            # Se energizar e não está ativo nem triggered, inicia contagem
+            # Se desenergizar, reseta
+            if coil_value:
+                if not timer.isActive and not timer.triggered:
+                    timer.start(timer.preset)
+            else:
+                # Desligou a bobina antes de terminar, resetar
+                if timer.isActive or timer.triggered:
+                    timer.isActive = False
+                    timer.remaining_time = timer.preset
+                    timer.triggered = False
+
         elif timer_type == "TOF":
             timer.type = 'OFF DELAY'
-
-        if coil_value:
-            # Se a bobina estiver energizada
-            if not timer.isActive and not timer.triggered:
-                # Reinicia o timer se não estava ativo
-                timer.start(timer.preset)
-        else:
-            # Desenergiza a bobina
-            if timer.type == 'ON DELAY':
-                # ON DELAY resetado se bobina desligada
-                timer.isActive = False
-                timer.remaining_time = timer.preset
-                timer.triggered = False
-            elif timer.type == 'OFF DELAY':
-                # Para OFF DELAY, ao desligar a bobina, o timer continua até terminar o delay
-                if not timer.isActive:
-                    # Se não estava ativo, pode-se iniciar o timer para OFF DELAY aqui
+            # OFF DELAY:
+            # Se energizar bobina, triggered = True imediatamente, para contagem se estava ativa
+            # Se desenergizar bobina e triggered = True, inicia contagem se não estava ativo
+            if coil_value:
+                # Bobina ligada
+                # Se não estava triggered, agora fica triggered
+                timer.triggered = True
+                # Se estava ativo contando, parar a contagem
+                if timer.isActive:
+                    timer.isActive = False
+                    timer.remaining_time = timer.preset
+                # Não inicia contagem aqui, contagem só inicia quando desenergizar
+            else:
+                # Bobina desligada
+                # Se estava triggered = True e não está ativo, inicia contagem
+                if timer.triggered and not timer.isActive:
+                    # Inicia contagem para desligar saída após tempo
                     timer.start(timer.preset)
-                # Se já estava ativo, apenas continua contando até o final.
-                pass
+                elif not timer.triggered:
+                    # Se não estava triggered, nada a fazer
+                    pass
