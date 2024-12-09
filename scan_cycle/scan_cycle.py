@@ -1,33 +1,36 @@
+import re
 from components.counter import Counter
 from components.timer import Timer
 
 class ScanCycle:
     def __init__(self, logical_structure):
-        self.cycles = 0 # Number of scan cycles executed
-        # Initialization of attributes related to PLC inputs, outputs, and memories
-        self.inputs = [False] * 8  # Assuming 8 digital inputs
-        self.outputs = [False] * 8  # Assuming 8 digital outputs
-        self.memory_image_inputs = [False] * 8  # Input image memory
-        self.memory_image_outputs = [False] * 8  # Output image memory
-        self.boolean_memories = [False] * 32  # Local boolean memories (32)
+        self.cycles = 0  # Número de ciclos de varredura executados
+        # Inicialização de atributos relacionados às entradas, saídas e memórias do PLC
+        self.inputs = [False] * 8  # 8 entradas digitais
+        self.outputs = [False] * 8  # 8 saídas digitais
+        self.memory_image_inputs = [False] * 8  # Memória imagem das entradas
+        self.memory_image_outputs = [False] * 8  # Memória imagem das saídas
+        self.boolean_memories = [False] * 32  # Memórias booleanas locais (B1,B2,...B32)
         self.logical_structure = logical_structure
 
-        # Timers and Counters dictionaries
+        # Dicionários de Temporizadores e Contadores
         self.timers = {
-            f"T{i+1}": Timer(name=f"T{i+1}") for i in range(8)
-        }  # Timers named T1, T2, ..., T8
+            f"T{i+1}": Timer(name=f"T{i+1}") for i in range(32)
+        }  # Temporizadores T1, T2, ..., T32
 
         self.counters = {
             f"C{i+1}": Counter(name=f"C{i+1}", counter_type='UP') for i in range(8)
-        }  # Counters named C1, C2, ..., C8
+        }  # Contadores C1, C2, ..., C8
 
-        self.mode = 'STOP'  # Initial mode of the PLC
+        self.mode = 'STOP'  # Modo inicial do PLC
+        self.user_program = []  # Lista para armazenar o programa do usuário
+
+        # Para detecção de bordas em contadores
+        self.counter_coils = {}       # Estado atual das bobinas CUPx/CDNx
+        self.prev_counter_coils = {}  # Estado anterior das bobinas CUPx/CDNx
 
     def initialize_system(self):
-        """
-        Initializes the system, configuring memories and initial states.
-        """
-        print("Initializing the system...")
+        print("Inicializando o sistema...")
         self.cycles = 0
         self.memory_image_inputs = [False] * len(self.memory_image_inputs)
         self.memory_image_outputs = [False] * len(self.memory_image_outputs)
@@ -37,134 +40,336 @@ class ScanCycle:
             timer.remaining_time = 0
             timer.isActive = False
             timer.triggered = False
+            timer.type = 'ON DELAY'  # default, pode ser alterado depois
         for counter in self.counters.values():
             counter.count = 0
-        print("System initialized successfully.")
+        print("Sistema inicializado com sucesso.")
 
     def read_inputs(self):
         """
-        Reads the state of the inputs and stores it in the input image memory.
+        Lê o estado das entradas e armazena na memória imagem.
         """
         if self.mode == 'RUN':
-            print("Reading inputs...")
             self.memory_image_inputs = self.inputs.copy()
-            print(f"Inputs read: {self.memory_image_inputs}")
 
     def process_user_program(self):
         """
-        Processes the user program and applies the logic to the outputs using RPN.
+        Processa o programa do usuário e aplica a lógica às saídas usando RPN.
         """
         if self.mode == 'RUN':
-            print("Processing the user program...")
-            # TODO: Add logic for AND, OR, NOT, counters, timers, etc.
-
-            rpn_instructions = [
-            "IN1", "M1", "AND", "T1", "OR", "O1"
-            ]
-                # Pilha para armazenar operandos durante a avaliação
-        stack = []
-
-        # Loop através dos elementos da RPN
-        for token in rpn_instructions:
-            if token.startswith("IN") or token.startswith("M") or token.startswith("T"):
-                # Caso seja um operando (entrada, memória ou temporizador)
-                value = self._get_value(token)
-                stack.append(value)
-
-            elif token in ["AND", "OR", "NOT"]:
-                # Caso seja um operador, desempilhar operandos e aplicar operação
-                if token == "NOT":
-                    # NOT precisa de apenas um operando
-                    operand = stack.pop()
-                    result = not operand
-                    stack.append(result)
-                else:
-                    # AND e OR precisam de dois operandos
-                    operand2 = stack.pop()
-                    operand1 = stack.pop()
-                    if token == "AND":
-                        result = operand1 and operand2
-                    elif token == "OR":
-                        result = operand1 or operand2
-                    stack.append(result)
-
-            elif token.startswith("OUT"):
-                # Caso seja uma saída, armazenar o valor atual da pilha na saída especificada
-                output_value = stack.pop()
-                self._set_output(token, output_value)
-
-        print(f"Output image memory after processing: {self.memory_image_outputs}")
+            for line in self.user_program:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue  # Pule linhas vazias ou comentários
+                if '=' not in line:
+                    print(f"Linha inválida: {line}")
+                    continue
+                identifier, expression = line.split('=', 1)
+                identifier = identifier.strip()
+                expression = expression.strip()
+                rpn_instructions = self._convert_to_rpn(expression)
+                # Adiciona o identificador para definir a saída ou memória no final
+                rpn_instructions.append(identifier)
+                self._execute_rpn(rpn_instructions)
 
     def update_outputs(self):
         """
-        Updates the state of the physical or simulated outputs from the output image memory.
+        Atualiza as saídas físicas ou simuladas a partir da memória imagem.
         """
         if self.mode == 'RUN':
-            print("Updating outputs...")
             self.outputs = self.memory_image_outputs.copy()
-            print(f"Outputs updated: {self.outputs}")
 
     def update_timers(self):
         """
-        Updates the state of all timers.
+        Atualiza o estado de todos os temporizadores.
         """
         for timer in self.timers.values():
             timer.update()
 
     def increment_counter(self, counter_name):
         """
-        Increments the specified counter.
+        Incrementa o contador especificado.
         """
         if counter_name in self.counters:
             self.counters[counter_name].increment()
 
+    def decrement_counter(self, counter_name):
+        """
+        Decrementa o contador especificado.
+        """
+        if counter_name in self.counters:
+            self.counters[counter_name].decrement()
+
     def start_timer(self, timer_name, delay, timer_type='ON DELAY'):
         """
-        Starts a timer with a specified delay (ON DELAY or OFF DELAY).
+        Inicia um temporizador com um delay especificado.
         """
         if timer_name in self.timers:
-            self.timers[timer_name].start(delay)
-            self.timers[timer_name].type = timer_type
-            print(f"Started {timer_type} timer {timer_name} with delay {delay * 0.1} seconds.")
+            timer = self.timers[timer_name]
+            timer.start(delay)
+            timer.type = timer_type
 
     def scan(self):
         """
-        Executes the complete PLC scan cycle.
+        Executa um ciclo completo de varredura do PLC.
         """
         if self.mode == 'RUN':
-            print("Starting PLC scan cycle...")
             self.read_inputs()
+            self.update_timers()  # Atualiza temporizadores
             self.process_user_program()
-            self.update_timers()  # Update timers as part of each scan cycle
+            # Após processar o programa, analisar bobinas de contadores
+            self._process_counters_coils()
             self.update_outputs()
             self.cycles += 1
-            print(f"Scan cycle completed. Made {self.cycles} cycles already. Returning to the beginning of the cycle...\n")
+            # Atualiza estado anterior dos contadores
+            self.prev_counter_coils = self.counter_coils.copy()
 
     def set_mode(self, mode):
         """
-        Changes the PLC operation mode (RUN, STOP, PROGRAM).
+        Altera o modo de operação do PLC (RUN, STOP, PROGRAM).
         """
         if mode in ['RUN', 'STOP', 'PROGRAM']:
             self.mode = mode
-            print(f"Changed mode to: {self.mode}")
+            print(f"Modo alterado para: {self.mode}")
         else:
-            print("Invalid mode. Valid modes: RUN, STOP, PROGRAM.")
+            print("Modo inválido. Modos válidos: RUN, STOP, PROGRAM.")
 
+    def _process_counters_coils(self):
+        """
+        Verifica todos os contadores definidos em counter_coils e detecta bordas de subida.
+        Incrementa ou decrementa o contador correspondente com base no tipo (CUP ou CDN).
+        """
+        for coil_name, current_state in self.counter_coils.items():
+            previous_state = self.prev_counter_coils.get(coil_name, False)
+            # Detectar borda de subida
+            if not previous_state and current_state:
+                match = re.match(r'^(CUP|CDN)(\d+)$', coil_name.upper())
+                if match:
+                    coil_type = match.group(1)  # CUP ou CDN
+                    coil_num = match.group(2)
+                    counter_name = f"C{coil_num}"
+                    if counter_name in self.counters:
+                        if coil_type == 'CUP':
+                            self.counters[counter_name].increment()
+                        elif coil_type == 'CDN':
+                            self.counters[counter_name].decrement()
 
-# Example of usage
-if __name__ == "__main__":
-    scan_cycle = ScanCycle()
-    scan_cycle.initialize_system()
+    def _get_value(self, token):
+        """
+        Retorna o valor associado a um token (entradas, memórias, timers, etc.).
+        """
+        token_upper = token.upper()
 
-    # Simulating inputs
-    scan_cycle.set_mode('RUN')
-    scan_cycle.inputs = [True, False, True, False, True, True, False, False]
+        # Verifica padrões para temporizadores contato
+        # Contato: TONOx ou TOFOx
+        contact_pattern = r'^(TON|TOF)O(\d+)$'
+        contact_match = re.match(contact_pattern, token_upper)
+        if contact_match:
+            timer_num = contact_match.group(2)
+            timer_name = f"T{timer_num}"
+            timer = self.timers.get(timer_name)
+            if not timer:
+                raise ValueError(f"Temporizador desconhecido: {timer_name}")
+            # Contato retorna estado triggered
+            return timer.triggered
 
-    # Start ON DELAY timer T1 with a delay of 5 cycles (0.5 seconds)
-    scan_cycle.start_timer("T1", 5, 'ON DELAY')
-    # Start OFF DELAY timer T2 with a delay of 8 cycles (0.8 seconds)
-    scan_cycle.start_timer("T2", 8, 'OFF DELAY')
+        # Bobina de temporizador: TONx ou TOFx
+        coil_pattern = r'^(TON|TOF)(\d+)$'
+        coil_match = re.match(coil_pattern, token_upper)
+        if coil_match:
+            # Bobina não é valor lógico de leitura, é um comando (feita em _execute_rpn)
+            raise ValueError(f"O token {token} representa uma bobina de temporizador e não pode ser lido como valor.")
 
-    # Executing the scan cycle multiple times to observe timer behavior
-    for _ in range(10):
-        scan_cycle.scan()
+        # Padrões para contadores (CUPx, CUPOx, CDNx, CDNOx)
+        counter_pattern = r'^(CUP|CDN)(O?)(\d+)$'
+        counter_match = re.match(counter_pattern, token_upper)
+        if counter_match:
+            counter_type = counter_match.group(1)  # CUP ou CDN
+            output_requested = (counter_match.group(2) == 'O')
+            counter_num = counter_match.group(3)
+            counter_name = f"C{counter_num}"
+            counter = self.counters.get(counter_name)
+            if not counter:
+                raise ValueError(f"Contador desconhecido: {counter_name}")
+            # Se for CUPO ou CDNO, retornamos True se count > 0
+            return (counter.count > 0)
+
+        # Entradas (I)
+        if token_upper.startswith("I") and token_upper[1:].isdigit():
+            index = int(token_upper[1:]) - 1
+            return self.memory_image_inputs[index]
+
+        # Saídas (O)
+        if token_upper.startswith("O") and token_upper[1:].isdigit():
+            index = int(token_upper[1:]) - 1
+            return self.memory_image_outputs[index]
+
+        # Memórias Booleanas (B)
+        if token_upper.startswith("B") and token_upper[1:].isdigit():
+            index = int(token_upper[1:]) - 1
+            return self.boolean_memories[index]
+
+        raise ValueError(f"Token desconhecido: {token}")
+
+    def _set_output(self, token, value):
+        """
+        Define o valor de uma saída (O) ou memória (B).
+        """
+        token_upper = token.upper()
+        if token_upper.startswith("O"):
+            index = int(token_upper[1:]) - 1
+            self.memory_image_outputs[index] = value
+        elif token_upper.startswith("B"):
+            index = int(token_upper[1:]) - 1
+            self.boolean_memories[index] = value
+        else:
+            raise ValueError(f"Token de saída desconhecido: {token}")
+
+    def _convert_to_rpn(self, expression):
+        """
+        Converte uma expressão lógica em RPN usando um algoritmo tipo Shunting Yard simplificado.
+        """
+        expression = expression.replace(' ', '')
+        token_pattern = r'(\bNOT\b|\(|\)|\^|\||\b[A-Za-z][A-Za-z0-9]*\b)'
+        tokens = re.findall(token_pattern, expression)
+        output_queue = []
+        operator_stack = []
+        precedence = {'NOT': 3, '^': 2, '|': 1}
+        associativity = {'NOT': 'right', '^': 'left', '|': 'left'}
+
+        for token in tokens:
+            token_upper = token.upper()
+            if token_upper in precedence:
+                while (operator_stack and operator_stack[-1] != '(' and
+                       ((associativity[token_upper] == 'left' and precedence[token_upper] <= precedence[operator_stack[-1]]) or
+                        (associativity[token_upper] == 'right' and precedence[token_upper] < precedence[operator_stack[-1]]))):
+                    output_queue.append(operator_stack.pop())
+                operator_stack.append(token_upper)
+            elif token == '(':
+                operator_stack.append(token)
+            elif token == ')':
+                while operator_stack and operator_stack[-1] != '(':
+                    output_queue.append(operator_stack.pop())
+                operator_stack.pop()  # Remove '('
+            else:
+                output_queue.append(token_upper)
+        while operator_stack:
+            output_queue.append(operator_stack.pop())
+
+        return output_queue
+
+    def _execute_rpn(self, rpn_instructions):
+        """
+        Executa as instruções em RPN e atualiza as saídas.
+        Diferencia bobinas e contatos de timers, e registra bobinas de contadores.
+        """
+        stack = []
+        for token in rpn_instructions:
+            token_upper = token.upper()
+
+            coil_pattern_timer = r'^(TON|TOF)(\d+)$'
+            coil_match_timer = re.match(coil_pattern_timer, token_upper)
+
+            contact_pattern_timer = r'^(TON|TOF)O(\d+)$'
+            contact_match_timer = re.match(contact_pattern_timer, token_upper)
+
+            coil_pattern_counter = r'^(CUP|CDN)(\d+)$'
+            coil_match_counter = re.match(coil_pattern_counter, token_upper)
+
+            if token_upper in ['^', '|', 'NOT']:
+                # Operadores lógicos
+                if token_upper == 'NOT':
+                    operand = stack.pop()
+                    stack.append(not operand)
+                else:
+                    operand2 = stack.pop()
+                    operand1 = stack.pop()
+                    if token_upper == '^':  # AND
+                        result = operand1 and operand2
+                    else:  # '|'
+                        result = operand1 or operand2
+                    stack.append(result)
+
+            elif contact_match_timer:
+                # Contato de timer (ex: TONO1, TOFO1)
+                value = self._get_value(token_upper)
+                stack.append(value)
+
+            elif coil_match_timer:
+                # Bobina de timer (ex: TON1, TOF1)
+                coil_value = stack.pop()
+                timer_type = coil_match_timer.group(1)
+                timer_num = coil_match_timer.group(2)
+                timer_name = f"T{timer_num}"
+                self._set_timer(timer_name, timer_type, coil_value)
+
+            elif coil_match_counter:
+                # Bobina de contador (CUPx ou CDNx)
+                coil_value = stack.pop()
+                coil_type = coil_match_counter.group(1)  # CUP ou CDN
+                coil_num = coil_match_counter.group(2)
+                coil_full_name = f"{coil_type.upper()}{coil_num}"
+                # Armazena o estado dessa bobina no ciclo atual
+                self.counter_coils[coil_full_name] = coil_value
+
+            elif token_upper.startswith('O') or token_upper.startswith('B'):
+                # É uma saída ou memória booleana
+                # Se for o último token (identificador), é destino de atribuição
+                # Caso contrário, é um operando, apenas empilhar seu valor
+                if token == rpn_instructions[-1]:
+                    # Identificador final: atribui o valor
+                    value = stack.pop()
+                    self._set_output(token_upper, value)
+                else:
+                    # Apenas obter valor
+                    value = self._get_value(token_upper)
+                    stack.append(value)
+
+            else:
+                # Operando (entrada, contador contato sem bobina, etc.)
+                value = self._get_value(token_upper)
+                stack.append(value)
+
+    def _set_timer(self, timer_name, timer_type, coil_value):
+        timer = self.timers.get(timer_name)
+        if not timer:
+            raise ValueError(f"Temporizador desconhecido: {timer_name}")
+
+        if timer_type == "TON":
+            timer.type = 'ON DELAY'
+            # ON DELAY:
+            # Se energizar e não está ativo nem triggered, inicia contagem
+            # Se desenergizar, reseta
+            if coil_value:
+                if not timer.isActive and not timer.triggered:
+                    timer.start(timer.preset)
+            else:
+                # Desligou a bobina antes de terminar, resetar
+                if timer.isActive or timer.triggered:
+                    timer.isActive = False
+                    timer.remaining_time = timer.preset
+                    timer.triggered = False
+
+        elif timer_type == "TOF":
+            timer.type = 'OFF DELAY'
+            # OFF DELAY:
+            # Se energizar bobina, triggered = True imediatamente, para contagem se estava ativa
+            # Se desenergizar bobina e triggered = True, inicia contagem se não estava ativo
+            if coil_value:
+                # Bobina ligada
+                # Se não estava triggered, agora fica triggered
+                timer.triggered = True
+                # Se estava ativo contando, parar a contagem
+                if timer.isActive:
+                    timer.isActive = False
+                    timer.remaining_time = timer.preset
+                # Não inicia contagem aqui, contagem só inicia quando desenergizar
+            else:
+                # Bobina desligada
+                # Se estava triggered = True e não está ativo, inicia contagem
+                if timer.triggered and not timer.isActive:
+                    # Inicia contagem para desligar saída após tempo
+                    timer.start(timer.preset)
+                elif not timer.triggered:
+                    # Se não estava triggered, nada a fazer
+                    pass

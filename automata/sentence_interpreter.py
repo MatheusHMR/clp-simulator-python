@@ -115,7 +115,7 @@ def simplifySentece(sentence):
     return (sentence, error)
 
         
-def interpretSentece(sentence):
+def interpretSentence(sentence):
     automaton = Automaton()
     
     tokenIndex = 0

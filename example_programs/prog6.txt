@@ -1,0 +1,3 @@
+TON1 = I1 ^ I2
+O1 = I3 ^ TONO1
+O2 = O1 | I4
