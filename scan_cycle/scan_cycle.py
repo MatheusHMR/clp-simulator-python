@@ -86,33 +86,40 @@ class ScanCycle:
         if self.mode == 'RUN':
             print("Processing the user program...")
 
-            # Atualizar entradas na estrutura lógica
-            self.logical_structure.updateInputs(self.memory_image_inputs)
-            self.logical_structure.updateBooleans(self.boolean_memories)
+            rpn_instructions = [
+            "IN1", "M1", "^", "T1", "|", "O1"
+            ]
+                # Pilha para armazenar operandos durante a avaliação
+        stack = []
 
-            # Executar o processamento e atualizar as saídas
-            for identifier, rpn in self.logical_structure.polishNotations:
-                result = resolve(rpn, self.memory_image_inputs, self.memory_image_outputs,
-                                 self.boolean_memories, self.timers, self.counters)
+        # Loop através dos elementos da RPN
+        for token in rpn_instructions:
+            if token.startswith("IN") or token.startswith("M") or token.startswith("T") or token.startswith("C"):
+                # Caso seja uma entrada, memória, temporizador ou contador, obter o valor correspondente
+                value = self._get_value(token)
+                stack.append(value)
 
-                # Verificar se é um temporizador ou contador
-                if identifier.startswith("T"):  # Temporizador
-                    timer = self.timers.get(identifier)
-                    if timer:
-                        timer.start(result)  # Usar o valor da instrução para definir ou resetar o temporizador
-                elif identifier.startswith("C"):  # Contador
-                    counter = self.counters.get(identifier)
-                    if counter:
-                        if counter.type == 'UP':
-                            counter.increment()
-                        elif counter.type == 'DOWN':
-                            counter.decrement()
+            elif token in ["^", "|", "!"]:
+                # Caso seja um operador, desempilhar operandos e aplicar operação
+                if token == "!":
+                    # NOT precisa de apenas um operando
+                    operand = stack.pop()
+                    result = not operand
+                    stack.append(result)
+                else:
+                    # AND e OR precisam de dois operandos
+                    operand2 = stack.pop()
+                    operand1 = stack.pop()
+                    if token == "^":
+                        result = operand1 and operand2
+                    elif token == "|":
+                        result = operand1 or operand2
+                    stack.append(result)
 
-                # Atualizar memórias ou saídas
-                if identifier.startswith("O"):  # Saída
-                    index = int(identifier[1:]) - 1
-                    if 0 <= index < len(self.memory_image_outputs):
-                        self.memory_image_outputs[index] = result
+            elif token.startswith("O"):
+                # Caso seja uma saída, armazenar o valor atual da pilha na saída especificada
+                output_value = stack.pop()
+                self._set_output(token, output_value)
 
             print(f"Output image memory after processing: {self.memory_image_outputs}")
 
@@ -170,6 +177,52 @@ class ScanCycle:
             print(f"Changed mode to: {self.mode}")
         else:
             print("Invalid mode. Valid modes: RUN, STOP, PROGRAM.")
+
+    def _get_value(self, token):
+        """
+        Retorna o valor associado ao token (entrada, memória, temporizador, etc.).
+        """
+        if token.startswith("IN"):
+            # Entrada digital
+            index = int(token[2:]) - 1  # Extrai o número da entrada
+            self.memory_image_inputs[index]
+        elif token.startswith("M"):
+            # Memória booleana
+            index = int(token[1:]) - 1  # Extrai o número da memória
+            self.boolean_memories[index]
+        elif token.startswith("T"):
+            # Temporizador
+            timer_name = token  # Nome do temporizador
+            if timer_name in self.timers:
+                self.timers[timer_name].triggered  # Retorna se o temporizador está ativo
+        elif token.startswith("C"):
+            # Contador
+            counter_name = token  # Nome do contador
+            if counter_name in self.counters:
+                self.counters[counter_name].count > 0  # Retorna True se o contador está maior que 0
+        else:
+            raise ValueError(f"Token inválido: {token}")
+
+    def _set_output(self, token, value):
+        """
+        Define o valor de uma saída específica no array de saídas.
+        
+        Args:
+            token (str): Nome da saída (por exemplo, "O1").
+            value (bool): Valor lógico a ser atribuído à saída.
+        """
+        if token.startswith("O") and token[1:].isdigit():
+            # Extrai o número da saída
+            index = int(token[1:]) - 1  # Exemplo: "O1" -> índice 0
+            if 0 <= index < len(self.memory_image_outputs):
+                self.memory_image_outputs[index] = value
+                print(f"Output {token} definido para {value}.")
+            else:
+                raise ValueError(f"Índice de saída inválido: {index}")
+        else:
+            raise ValueError(f"Token inválido para saída: {token}")
+
+
 
 
 # Example of usage
