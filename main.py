@@ -4,6 +4,7 @@ from components.counter import Counter
 # Remover a importação de LogicalStructure
 # from reverse_polish_notation.create_notation import reverse_polish_notation
 # from reverse_polish_notation.logical_structure import LogicalStructure
+from reverse_polish_notation import logical_structure
 from views import (
     authors,
     error,
@@ -26,8 +27,8 @@ from scan_cycle.scan_cycle import ScanCycle
 class PLCProgrammer:
     def __init__(self):
         # Inicialização de variáveis
-        # Substituir LogicalStructure por ScanCycle
-        self.scan_cycle = ScanCycle()
+
+        self.scan_cycle = ScanCycle(logical_structure=logical_structure.LogicalStructure([]))
         self.in_execution = False
         self.is_connected = False
         self.serial_port = comm.initializeSerial()
@@ -192,7 +193,7 @@ class PLCProgrammer:
         program_lines = program_text.strip().splitlines()
         errors = []
         for idx, line in enumerate(program_lines):
-            res = senInt.interpretSentece(line)
+            res = senInt.interpretSentence(line)
             if res == 1:
                 errors.append(f'Erro de sintaxe na linha {idx + 1}')
             elif res == 2:
@@ -251,7 +252,7 @@ class PLCProgrammer:
     def stop_program(self):
         self.scan_cycle.set_mode('STOP')
         self.scan_cycle.initialize_system()
-        comm.sendLedByte(self.serial_port, b'@00000000#')
+        # comm.sendLedByte(self.serial_port, b'@00000000#')
         self.update_io_values([False]*8, [False]*8, [False]*32)
         self.in_execution = self.update_execution_status(False)
         self.is_connected = self.update_connection_status(False)
