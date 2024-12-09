@@ -264,13 +264,13 @@ class PLCProgrammer:
                                       fg=("green" if self.in_execution else "red"))
 
     def new_program(self):
-        if confirm_new.confirmNewProgram():
+        if confirm_new.confirmNewProgram(self.root):
             self.program_text.delete("1.0", tk.END)
             self.in_execution = False
             self.scan_cycle.initialize_system()
 
     def open_program(self):
-        if confirm_new.confirmNewProgram():
+        if confirm_new.confirmNewProgram(self.root):
             path = filedialog.askopenfilename()
             if path:
                 try:
@@ -447,10 +447,10 @@ class PLCProgrammer:
         self.update_status_bar()
 
     def show_about(self):
-        messagebox.showinfo("Sobre", "PLC Programmer\nVersão 1.0\nDesenvolvido por:\nEmanuel Carlos de Mello\nFúlvio Diniz Santos\nGilmar dos Reis Júnior\nMatheus Henrique Maia Ramos\nBaseado no trabalho de Nathan Rodrigues")
+        messagebox.showinfo("Sobre", "PLC Programmer\nVersão 1.0\nDesenvolvido por:\nEmanuel Carlos de Mello\nFúlvio Diniz Santos\nGilmar dos Reis Júnior\nMatheus Henrique Maia Ramos\n\nBaseado no trabalho de Nathan Silva Rodrigues")
 
     def show_help(self):
-        program_help.programHelpWindow()
+        program_help.programHelpWindow(self.root)
 
     def execute_cycle(self):
         inputs = [var.get() for var in self.input_vars]
