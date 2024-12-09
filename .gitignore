@@ -1,6 +1,10 @@
 # Poetry lock file
 poetry.lock
 
+# Spec
+main.spec
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
